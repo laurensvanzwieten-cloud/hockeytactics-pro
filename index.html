@@ -1,0 +1,1785 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>HockeyTactics Pro</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2d8a4e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/html-to-image@1.11.11/dist/html-to-image.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        dark: { 800: '#1a1d23', 700: '#22262e', 600: '#2a2f38', 500: '#353b47' },
+                        field: { green: '#2d8a4e', light: '#34a058', dark: '#247a3f', line: '#ffffff' },
+                        teamA: { DEFAULT: '#ff6b2b', light: '#ff8f5e' },
+                        teamB: { DEFAULT: '#2563eb', light: '#5b8def' },
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        body { overscroll-behavior: none; }
+        .field-gradient {
+            background: linear-gradient(180deg, #2d8a4e 0%, #34a058 25%, #2d8a4e 50%, #34a058 75%, #2d8a4e 100%);
+        }
+        .field-stripe-even { fill: #2d8a4e; }
+        .field-stripe-odd { fill: #34a058; }
+        .player-icon {
+            cursor: grab;
+            touch-action: none;
+            user-select: none;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+            transition: filter 0.15s;
+        }
+        .player-icon:active, .player-icon.dragging {
+            cursor: grabbing;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6));
+        }
+        .toolbar-btn {
+            transition: all 0.15s ease;
+        }
+        .toolbar-btn:hover {
+            transform: translateY(-1px);
+        }
+        .toolbar-btn.active {
+            box-shadow: 0 0 0 2px #ff6b2b, 0 0 12px rgba(255,107,43,0.3);
+        }
+        .drawing-line { pointer-events: none; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1a1d23; }
+        ::-webkit-scrollbar-thumb { background: #353b47; border-radius: 3px; }
+        @keyframes pulse-glow { 0%,100%{box-shadow:0 0 5px rgba(255,107,43,0.3)} 50%{box-shadow:0 0 15px rgba(255,107,43,0.6)} }
+        .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+    </style>
+</head>
+<body class="bg-dark-800 text-white font-sans overflow-hidden h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect, useCallback, useMemo } = React;
+
+        // ─── Constants ──────────────────────────────────────────────
+        const GAME_FORMATS = {
+            '6v6': { label: '6 tegen 6', players: 6, desc: 'Zestallen - Kwart veld' },
+            '8v8': { label: '8 tegen 8', players: 8, desc: 'Achtallen - Half veld' },
+            '9v9': { label: '9 tegen 9', players: 9, desc: 'D-Jeugd - Compact veld' },
+            '11v11': { label: '11 tegen 11', players: 11, desc: 'Volledig wedstrijdveld' },
+        };
+
+        const FORMATIONS = {
+            '6v6': {
+                '3-2': [[50,85],[20,60],[50,60],[80,60],[35,35],[65,35]],
+                '2-3': [[50,85],[30,60],[70,60],[20,35],[50,35],[80,35]],
+                '3-3': [[50,85],[20,60],[50,60],[80,60],[20,30],[50,30],[80,30]],
+                '2-2-1': [[50,85],[30,65],[70,65],[35,40],[65,40],[50,18]],
+            },
+            '8v8': {
+                '3-3-1': [[50,90],[20,72],[50,72],[80,72],[20,48],[50,48],[80,48],[50,25]],
+                '3-2-2': [[50,90],[20,72],[50,72],[80,72],[35,50],[65,50],[35,28],[65,28]],
+                '2-3-2': [[50,90],[30,72],[70,72],[20,50],[50,50],[80,50],[35,28],[65,28]],
+                '3-2-3': [[50,90],[20,72],[50,72],[80,72],[35,52],[65,52],[20,28],[50,28],[80,28]],
+            },
+            '9v9': {
+                '3-3-2': [[50,90],[20,72],[50,72],[80,72],[20,50],[50,50],[80,50],[35,28],[65,28]],
+                '4-3-1': [[50,90],[15,72],[38,72],[62,72],[85,72],[25,48],[50,48],[75,48],[50,25]],
+                '3-2-3': [[50,90],[20,72],[50,72],[80,72],[35,52],[65,52],[20,28],[50,28],[80,28]],
+            },
+            '11v11': {
+                '4-3-3': [[50,92],[15,75],[38,75],[62,75],[85,75],[25,52],[50,52],[75,52],[20,28],[50,28],[80,28]],
+                '3-4-3': [[50,92],[25,75],[50,75],[75,75],[15,52],[38,52],[62,52],[85,52],[20,28],[50,28],[80,28]],
+                '4-4-2': [[50,92],[15,75],[38,75],[62,75],[85,75],[15,50],[38,50],[62,50],[85,50],[35,25],[65,25]],
+                '3-5-2': [[50,92],[25,75],[50,75],[75,75],[10,50],[30,50],[50,50],[70,50],[90,50],[35,25],[65,25]],
+            },
+        };
+
+        const DRAW_COLORS = [
+            { name: 'Wit', value: '#ffffff' },
+            { name: 'Geel', value: '#facc15' },
+            { name: 'Rood', value: '#ef4444' },
+            { name: 'Blauw', value: '#3b82f6' },
+            { name: 'Oranje', value: '#f97316' },
+        ];
+
+        // ─── Example Simulations ────────────────────────────────────
+        // Each simulation has a name, description, format, and frames (array of player position arrays)
+        // Player positions: [teamA_positions..., teamB_positions...] where each is {x, y}
+        // Team A = attacking (bottom, oranje), Team B = defending (top, blauw)
+
+        const EXAMPLE_SIMULATIONS = {
+            '11v11': [
+                {
+                    name: 'Strafcorner Basis',
+                    desc: 'Klassieke strafcorner routine met aangever, stopper en schieter',
+                    icon: '🎯',
+                    frames: [
+                        // Frame 1: Opstelling - aangever heeft bal
+                        { A: [[50,94],[62,5],[58,8],[54,8],[50,10],[45,10],[30,12],[70,12],[20,40],[50,40],[80,40]],
+                          B: [[50,6],[42,4],[46,4],[50,4],[54,4],[58,4],[40,15],[60,15],[30,30],[50,30],[70,30]], ball: 'a-1' },
+                        // Frame 2: Ingespeeld naar stopper
+                        { A: [[50,94],[55,5],[50,12],[54,8],[48,14],[42,14],[30,12],[70,12],[20,35],[50,35],[80,35]],
+                          B: [[50,6],[42,6],[46,6],[50,5],[54,6],[58,6],[38,12],[58,12],[30,25],[50,25],[70,25]], ball: 'a-2' },
+                        // Frame 3: Schot op goal door schieter
+                        { A: [[50,94],[50,5],[50,10],[58,12],[42,16],[38,18],[28,14],[68,14],[22,30],[50,30],[78,30]],
+                          B: [[50,4],[42,7],[46,7],[50,5],[54,7],[58,7],[35,10],[55,10],[30,22],[50,22],[70,22]], ball: 'a-1' },
+                    ]
+                },
+                {
+                    name: 'Opbouw vanuit Achteren',
+                    desc: 'Gecontroleerde opbouw via de verdediging naar de aanval',
+                    icon: '🔄',
+                    frames: [
+                        // Frame 1: Keeper trapt af
+                        { A: [[50,94],[20,80],[40,80],[60,80],[80,80],[25,55],[50,55],[75,55],[20,30],[50,30],[80,30]],
+                          B: [[50,6],[20,20],[40,20],[60,20],[80,20],[25,40],[50,40],[75,40],[25,60],[50,55],[75,60]], ball: 'a-0' },
+                        // Frame 2: Bal naar rechts uitgespeeld
+                        { A: [[50,94],[20,75],[40,72],[60,68],[80,65],[30,50],[55,48],[70,42],[25,28],[50,28],[75,25]],
+                          B: [[50,6],[22,22],[42,22],[60,25],[78,28],[28,38],[52,38],[72,35],[28,55],[50,50],[72,55]], ball: 'a-4' },
+                        // Frame 3: Doorgespeeld naar middenveld
+                        { A: [[50,94],[22,72],[42,68],[62,60],[78,55],[35,42],[58,38],[72,32],[28,22],[52,20],[78,18]],
+                          B: [[50,6],[25,25],[45,25],[62,28],[75,32],[32,35],[55,35],[70,30],[30,50],[52,48],[72,50]], ball: 'a-7' },
+                        // Frame 4: Aanval op de cirkel
+                        { A: [[50,94],[25,70],[45,65],[60,55],[75,48],[38,38],[60,30],[72,22],[32,15],[55,12],[75,10]],
+                          B: [[50,6],[28,28],[48,25],[60,22],[72,20],[35,32],[58,28],[68,22],[32,45],[55,42],[72,45]], ball: 'a-9' },
+                    ]
+                },
+                {
+                    name: 'Hoge Druk / Press',
+                    desc: 'Pressing hoog op het veld bij aftrap tegenstander',
+                    icon: '⚡',
+                    frames: [
+                        // Frame 1: Tegenstander heeft bal
+                        { A: [[50,94],[18,65],[38,65],[62,65],[82,65],[22,42],[50,42],[78,42],[22,22],[50,18],[78,22]],
+                          B: [[50,6],[20,20],[40,20],[60,20],[80,20],[30,35],[50,35],[70,35],[25,55],[50,50],[75,55]], ball: 'b-6' },
+                        // Frame 2: Press richting bal
+                        { A: [[50,94],[22,60],[42,55],[65,50],[80,45],[28,38],[55,35],[75,30],[28,18],[52,15],[75,12]],
+                          B: [[50,6],[22,22],[42,25],[62,28],[78,30],[32,38],[52,38],[70,35],[28,52],[52,48],[72,52]], ball: 'b-7' },
+                        // Frame 3: Bal veroverd, omschakeling
+                        { A: [[50,94],[25,58],[45,52],[65,42],[78,35],[32,32],[58,28],[72,20],[30,15],[55,10],[78,8]],
+                          B: [[50,6],[25,25],[45,28],[62,32],[75,35],[35,40],[55,40],[70,38],[30,55],[52,52],[72,55]], ball: 'a-4' },
+                    ]
+                },
+                {
+                    name: 'Counter-aanval',
+                    desc: 'Snelle omschakeling na balverovering op eigen helft',
+                    icon: '🚀',
+                    frames: [
+                        // Frame 1: Bal net veroverd door verdediger
+                        { A: [[50,94],[18,78],[38,78],[62,78],[82,78],[25,58],[50,58],[75,58],[30,38],[50,35],[70,38]],
+                          B: [[50,6],[20,25],[40,22],[60,22],[80,25],[25,42],[50,38],[75,42],[25,60],[50,55],[75,60]], ball: 'a-6' },
+                        // Frame 2: Lange pass naar voren
+                        { A: [[50,94],[20,72],[40,68],[60,65],[80,68],[28,48],[52,42],[72,45],[25,25],[50,20],[75,25]],
+                          B: [[50,6],[22,28],[42,28],[62,30],[78,32],[28,42],[52,40],[72,42],[28,55],[52,50],[72,55]], ball: 'a-10' },
+                        // Frame 3: Sprint naar cirkel
+                        { A: [[50,94],[22,68],[42,62],[62,55],[78,58],[32,40],[55,32],[70,35],[28,15],[52,10],[72,15]],
+                          B: [[50,6],[25,30],[45,30],[62,32],[75,35],[32,40],[55,38],[70,40],[30,50],[52,48],[70,50]], ball: 'a-9' },
+                        // Frame 4: Kans creëren
+                        { A: [[50,94],[25,65],[45,58],[62,48],[75,50],[35,35],[58,25],[68,28],[32,10],[52,6],[68,10]],
+                          B: [[50,5],[28,15],[48,12],[60,10],[72,12],[35,25],[55,22],[68,20],[32,45],[55,42],[70,45]], ball: 'a-10' },
+                    ]
+                },
+                {
+                    name: 'Vleugelaanval Rechts',
+                    desc: 'Aanvalsopbouw via de rechtervleugel met voorzet',
+                    icon: '➡️',
+                    frames: [
+                        // Frame 1: Opbouw positie
+                        { A: [[50,94],[18,75],[38,75],[62,75],[82,75],[25,52],[50,52],[75,52],[20,28],[50,28],[80,28]],
+                          B: [[50,6],[20,20],[40,20],[60,20],[80,20],[25,40],[50,40],[75,40],[25,60],[50,55],[75,60]] },
+                        // Frame 2: Bal naar rechts
+                        { A: [[50,94],[20,72],[40,70],[65,62],[85,55],[28,48],[55,45],[78,38],[22,25],[50,22],[78,18]],
+                          B: [[50,6],[22,22],[42,22],[62,25],[80,28],[28,38],[52,38],[75,32],[28,55],[52,50],[72,55]] },
+                        // Frame 3: Dieptepass rechts
+                        { A: [[50,94],[22,70],[42,65],[68,52],[88,35],[30,45],[58,38],[80,25],[25,20],[50,15],[75,10]],
+                          B: [[50,6],[25,22],[45,22],[65,25],[80,20],[30,35],[55,35],[75,25],[30,50],[52,48],[70,50]] },
+                        // Frame 4: Voorzet en afronding
+                        { A: [[50,94],[25,68],[45,60],[68,45],[85,20],[32,42],[60,30],[78,15],[30,12],[50,8],[68,10]],
+                          B: [[50,5],[28,15],[48,12],[62,10],[75,10],[32,30],[55,25],[72,15],[32,45],[55,42],[68,45]] },
+                    ]
+                },
+            ],
+            '8v8': [
+                {
+                    name: 'Strafcorner 8-tal',
+                    desc: 'Strafcorner routine voor 8 tegen 8',
+                    icon: '🎯',
+                    frames: [
+                        { A: [[50,93],[62,5],[56,8],[50,10],[44,10],[30,15],[70,15],[50,35]],
+                          B: [[50,7],[44,4],[48,4],[52,4],[56,4],[40,12],[60,12],[50,25]] },
+                        { A: [[50,93],[55,5],[50,12],[48,14],[42,14],[30,14],[68,14],[50,30]],
+                          B: [[50,7],[44,6],[48,6],[52,5],[56,6],[38,10],[58,10],[50,22]] },
+                        { A: [[50,93],[50,5],[50,10],[52,14],[40,16],[28,16],[66,16],[48,25]],
+                          B: [[50,5],[44,7],[48,7],[52,6],[56,7],[36,10],[56,10],[50,20]] },
+                    ]
+                },
+                {
+                    name: 'Opbouw 3-2-2',
+                    desc: 'Opbouw vanuit 3-2-2 formatie met breed spel',
+                    icon: '🔄',
+                    frames: [
+                        { A: [[50,93],[20,72],[50,72],[80,72],[35,50],[65,50],[35,28],[65,28]],
+                          B: [[50,7],[20,25],[50,25],[80,25],[35,42],[65,42],[35,60],[65,60]] },
+                        { A: [[50,93],[25,65],[55,60],[82,55],[40,42],[68,38],[38,22],[65,18]],
+                          B: [[50,7],[22,28],[52,30],[78,32],[38,40],[65,38],[38,55],[62,55]] },
+                        { A: [[50,93],[28,60],[58,50],[80,42],[42,35],[70,28],[35,15],[62,10]],
+                          B: [[50,7],[25,30],[55,30],[75,28],[40,38],[65,35],[40,50],[60,50]] },
+                    ]
+                },
+                {
+                    name: 'Hoge Press 8-tal',
+                    desc: 'Pressing bij aftrap tegenstander',
+                    icon: '⚡',
+                    frames: [
+                        { A: [[50,93],[20,62],[50,62],[80,62],[30,38],[70,38],[35,18],[65,18]],
+                          B: [[50,7],[20,22],[50,22],[80,22],[30,40],[70,40],[35,60],[65,60]] },
+                        { A: [[50,93],[25,55],[55,48],[80,50],[35,32],[72,28],[38,15],[68,12]],
+                          B: [[50,7],[22,25],[52,28],[78,30],[32,42],[68,40],[38,55],[62,55]] },
+                        { A: [[50,93],[28,50],[58,40],[78,42],[38,28],[70,22],[35,10],[65,8]],
+                          B: [[50,7],[25,28],[55,30],[75,32],[35,42],[68,38],[40,52],[60,52]] },
+                    ]
+                },
+            ],
+            '6v6': [
+                {
+                    name: 'Driehoekjes Spelen',
+                    desc: 'Aanval via korte driehoek-combinaties',
+                    icon: '🔺',
+                    frames: [
+                        { A: [[50,93],[20,60],[50,60],[80,60],[35,30],[65,30]],
+                          B: [[50,7],[20,35],[50,35],[80,35],[35,62],[65,62]], ball: 'a-2' },
+                        { A: [[50,93],[25,52],[55,45],[78,50],[40,22],[62,18]],
+                          B: [[50,7],[22,38],[52,38],[78,40],[38,58],[62,58]], ball: 'a-4' },
+                        { A: [[50,93],[30,45],[58,35],[75,40],[42,15],[58,10]],
+                          B: [[50,7],[25,32],[55,30],[75,32],[40,52],[60,52]], ball: 'a-5' },
+                    ]
+                },
+                {
+                    name: 'Brede Aanval 6-tal',
+                    desc: 'Breed uitgespeeld met switch naar de andere kant',
+                    icon: '↔️',
+                    frames: [
+                        { A: [[50,93],[15,60],[50,60],[85,60],[35,30],[65,30]],
+                          B: [[50,7],[15,35],[50,35],[85,35],[35,62],[65,62]], ball: 'a-1' },
+                        { A: [[50,93],[12,48],[45,50],[85,42],[30,22],[70,18]],
+                          B: [[50,7],[18,38],[48,38],[82,35],[38,58],[65,55]], ball: 'a-3' },
+                        { A: [[50,93],[18,45],[40,38],[82,30],[25,18],[72,10]],
+                          B: [[50,7],[20,32],[42,30],[80,28],[35,52],[62,48]], ball: 'a-5' },
+                    ]
+                },
+                {
+                    name: 'Counter via Midden',
+                    desc: 'Snelle omschakeling via het centrum na balverovering',
+                    icon: '🚀',
+                    frames: [
+                        // Frame 1: Tegenstander valt aan, bal veroverd door verdediger
+                        { A: [[50,93],[25,70],[50,65],[75,70],[35,42],[65,42]],
+                          B: [[50,7],[25,28],[50,28],[75,28],[35,50],[65,50]], ball: 'a-2' },
+                        // Frame 2: Snelle pass naar middenveld
+                        { A: [[50,93],[28,65],[52,55],[72,62],[40,32],[60,25]],
+                          B: [[50,7],[28,30],[52,32],[72,35],[38,48],[62,48]], ball: 'a-4' },
+                        // Frame 3: Doorbraak naar de cirkel
+                        { A: [[50,93],[30,60],[55,45],[70,52],[42,20],[58,12]],
+                          B: [[50,7],[30,28],[52,28],[70,30],[40,42],[60,42]], ball: 'a-5' },
+                    ]
+                },
+                {
+                    name: 'Hoge Press 6-tal',
+                    desc: 'Druk zetten op de opbouw van de tegenstander',
+                    icon: '⚡',
+                    frames: [
+                        // Frame 1: Tegenstander bouwt op, wij staan hoog
+                        { A: [[50,93],[22,55],[50,50],[78,55],[35,28],[65,28]],
+                          B: [[50,7],[20,25],[50,25],[80,25],[35,48],[65,48]], ball: 'b-1' },
+                        // Frame 2: Press naar de bal (links)
+                        { A: [[50,93],[20,42],[45,38],[72,48],[30,22],[62,20]],
+                          B: [[50,7],[18,30],[48,32],[78,30],[32,48],[62,45]], ball: 'b-2' },
+                        // Frame 3: Bal veroverd, direct vooruit
+                        { A: [[50,93],[22,40],[42,30],[68,42],[28,15],[60,12]],
+                          B: [[50,7],[20,32],[45,35],[75,35],[35,50],[62,48]], ball: 'a-2' },
+                        // Frame 4: Kans op goal
+                        { A: [[50,93],[25,38],[45,22],[65,35],[32,10],[55,8]],
+                          B: [[50,7],[22,25],[42,22],[72,28],[38,42],[60,42]], ball: 'a-5' },
+                    ]
+                },
+                {
+                    name: 'Opbouw via Keeper',
+                    desc: 'Gecontroleerde opbouw vanuit de keeper via de zijkant',
+                    icon: '🔄',
+                    frames: [
+                        // Frame 1: Keeper heeft de bal
+                        { A: [[50,93],[20,72],[50,68],[80,72],[35,40],[65,40]],
+                          B: [[50,7],[20,28],[50,28],[80,28],[35,52],[65,52]], ball: 'a-0' },
+                        // Frame 2: Pass naar rechter verdediger
+                        { A: [[50,93],[22,65],[55,60],[82,58],[38,35],[68,30]],
+                          B: [[50,7],[22,30],[52,32],[80,32],[38,50],[65,48]], ball: 'a-3' },
+                        // Frame 3: Doorgespeeld naar middenveld
+                        { A: [[50,93],[25,60],[58,48],[80,50],[42,28],[68,22]],
+                          B: [[50,7],[25,32],[55,30],[78,28],[40,45],[62,42]], ball: 'a-5' },
+                        // Frame 4: Aanval op cirkel
+                        { A: [[50,93],[28,55],[60,40],[78,42],[45,18],[62,10]],
+                          B: [[50,7],[28,28],[58,25],[75,25],[42,40],[60,38]], ball: 'a-5' },
+                    ]
+                },
+                {
+                    name: 'Strafcorner 6-tal',
+                    desc: 'Strafcorner routine met aangever en schieter',
+                    icon: '🎯',
+                    frames: [
+                        // Frame 1: Opstelling - aangever rechts van doel
+                        { A: [[50,93],[62,5],[50,10],[45,12],[30,15],[65,30]],
+                          B: [[50,7],[44,4],[50,4],[56,4],[40,12],[60,12]], ball: 'a-1' },
+                        // Frame 2: Ingespeeld naar stopper
+                        { A: [[50,93],[55,5],[50,10],[42,14],[28,16],[62,25]],
+                          B: [[50,7],[44,6],[50,5],[56,6],[38,10],[58,10]], ball: 'a-2' },
+                        // Frame 3: Schot of tip-in
+                        { A: [[50,93],[50,5],[50,8],[40,15],[25,18],[58,18]],
+                          B: [[50,5],[44,7],[50,6],[56,7],[36,10],[56,10]], ball: 'a-1' },
+                    ]
+                },
+                {
+                    name: 'Vleugelaanval Links',
+                    desc: 'Aanval via de linkerkant met voorzet naar midden',
+                    icon: '⬅️',
+                    frames: [
+                        // Frame 1: Bal bij linker verdediger
+                        { A: [[50,93],[18,62],[50,62],[82,62],[35,32],[65,32]],
+                          B: [[50,7],[18,35],[50,35],[82,35],[35,55],[65,55]], ball: 'a-1' },
+                        // Frame 2: Dribbel naar voren over links
+                        { A: [[50,93],[15,45],[45,52],[80,55],[30,22],[60,25]],
+                          B: [[50,7],[16,38],[45,38],[80,40],[32,52],[62,50]], ball: 'a-1' },
+                        // Frame 3: Voorzet naar midden
+                        { A: [[50,93],[12,30],[42,38],[78,48],[35,15],[55,12]],
+                          B: [[50,7],[14,32],[42,30],[78,35],[35,48],[60,45]], ball: 'a-4' },
+                        // Frame 4: Afronding
+                        { A: [[50,93],[15,28],[40,30],[75,42],[40,10],[52,6]],
+                          B: [[50,6],[16,22],[40,20],[75,28],[38,42],[58,40]], ball: 'a-5' },
+                    ]
+                },
+                {
+                    name: '2v1 Overtalsituatie',
+                    desc: 'Creëer en benut een 2 tegen 1 situatie',
+                    icon: '👥',
+                    frames: [
+                        // Frame 1: Opbouw, zoek de overtal
+                        { A: [[50,93],[20,58],[50,58],[80,58],[35,30],[65,30]],
+                          B: [[50,7],[20,35],[50,35],[80,35],[40,55],[60,55]], ball: 'a-2' },
+                        // Frame 2: Bal naar rechts, 2v1 situatie rechts
+                        { A: [[50,93],[25,52],[55,42],[82,45],[38,22],[68,18]],
+                          B: [[50,7],[22,38],[52,38],[80,32],[42,50],[62,48]], ball: 'a-3' },
+                        // Frame 3: Geef-en-ga combinatie
+                        { A: [[50,93],[28,48],[58,32],[80,30],[42,15],[68,10]],
+                          B: [[50,7],[25,32],[55,30],[78,25],[44,45],[60,42]], ball: 'a-5' },
+                        // Frame 4: Schot op goal
+                        { A: [[50,93],[30,45],[60,25],[78,22],[45,10],[60,6]],
+                          B: [[50,6],[28,28],[58,22],[76,18],[45,40],[58,38]], ball: 'a-5' },
+                    ]
+                },
+                {
+                    name: 'Ruit Formatie Aanval',
+                    desc: 'Aanval vanuit een ruitvormige opstelling met draaiend positiespel',
+                    icon: '💎',
+                    frames: [
+                        // Frame 1: Ruit-opstelling
+                        { A: [[50,93],[50,68],[25,48],[75,48],[50,30],[50,15]],
+                          B: [[50,7],[25,28],[50,28],[75,28],[40,52],[60,52]], ball: 'a-1' },
+                        // Frame 2: Bal breed, spelers roteren
+                        { A: [[50,93],[30,60],[20,40],[72,42],[55,25],[45,12]],
+                          B: [[50,7],[22,30],[48,30],[72,32],[38,50],[58,48]], ball: 'a-2' },
+                        // Frame 3: Switch naar andere kant
+                        { A: [[50,93],[25,52],[28,35],[78,35],[60,18],[42,10]],
+                          B: [[50,7],[24,28],[45,28],[75,25],[40,45],[58,42]], ball: 'a-3' },
+                        // Frame 4: Kans creëren via de rechterflank
+                        { A: [[50,93],[28,48],[32,30],[80,25],[55,10],[48,6]],
+                          B: [[50,6],[26,25],[42,22],[78,18],[42,40],[56,38]], ball: 'a-5' },
+                    ]
+                },
+                {
+                    name: 'Verdedigend Blok',
+                    desc: 'Compact verdedigen en loeren op de counter',
+                    icon: '🛡️',
+                    frames: [
+                        // Frame 1: Laag blok, tegenstander heeft bal
+                        { A: [[50,93],[25,75],[50,70],[75,75],[35,55],[65,55]],
+                          B: [[50,7],[20,28],[50,25],[80,28],[35,45],[65,42]], ball: 'b-5' },
+                        // Frame 2: Tegenstander komt, blok schuift
+                        { A: [[50,93],[28,70],[52,65],[72,70],[38,50],[62,48]],
+                          B: [[50,7],[22,32],[52,28],[78,35],[38,48],[68,38]], ball: 'b-4' },
+                        // Frame 3: Bal onderschept!
+                        { A: [[50,93],[30,65],[55,58],[70,62],[40,42],[62,38]],
+                          B: [[50,7],[25,35],[55,32],[75,38],[40,50],[68,42]], ball: 'a-4' },
+                        // Frame 4: Snelle counter
+                        { A: [[50,93],[32,58],[55,45],[68,52],[42,25],[58,15]],
+                          B: [[50,7],[28,35],[55,35],[72,40],[42,52],[65,48]], ball: 'a-5' },
+                    ]
+                },
+            ],
+            '9v9': [
+                {
+                    name: 'Strafcorner D-jeugd',
+                    desc: 'Strafcorner routine voor 9 tegen 9',
+                    icon: '🎯',
+                    frames: [
+                        { A: [[50,93],[62,5],[56,8],[50,10],[44,10],[30,15],[70,15],[35,35],[65,35]],
+                          B: [[50,7],[44,4],[48,4],[52,4],[56,4],[40,12],[60,12],[35,25],[65,25]] },
+                        { A: [[50,93],[55,5],[50,12],[48,14],[42,14],[28,14],[68,14],[35,30],[65,30]],
+                          B: [[50,7],[44,6],[48,6],[52,5],[56,6],[38,10],[58,10],[35,22],[65,22]] },
+                        { A: [[50,93],[50,5],[50,10],[52,14],[40,16],[26,16],[66,16],[38,25],[62,25]],
+                          B: [[50,5],[44,7],[48,7],[52,6],[56,7],[36,10],[56,10],[38,20],[62,20]] },
+                    ]
+                },
+                {
+                    name: 'Counter 9-tal',
+                    desc: 'Snelle counter via het midden na balverovering',
+                    icon: '🚀',
+                    frames: [
+                        { A: [[50,93],[20,75],[50,75],[80,75],[25,52],[50,52],[75,52],[35,30],[65,30]],
+                          B: [[50,7],[20,22],[50,22],[80,22],[25,40],[50,40],[75,40],[35,58],[65,58]] },
+                        { A: [[50,93],[22,68],[52,60],[78,65],[28,42],[55,35],[72,40],[32,18],[62,15]],
+                          B: [[50,7],[22,25],[52,28],[78,30],[28,42],[55,40],[72,42],[38,55],[62,55]] },
+                        { A: [[50,93],[25,62],[55,48],[75,55],[30,35],[58,25],[70,30],[30,10],[58,8]],
+                          B: [[50,7],[25,28],[55,30],[75,32],[32,40],[58,38],[70,40],[40,50],[60,50]] },
+                    ]
+                },
+            ],
+        };
+
+        // ─── Helper: generate initial players ──────────────────────
+        // D-circle geometry per format: arc radius and half-chord to compute circle center
+        // 6v6/8v8/11v11: arc from x=30 to x=70, r=22 → halfChord=20
+        // 9v9: arc from x=28 to x=72, r=24 → halfChord=22
+        const D_CIRCLE = {
+            '6v6':  { r: 22, halfChord: 20 },
+            '8v8':  { r: 22, halfChord: 20 },
+            '9v9':  { r: 24, halfChord: 22 },
+            '11v11': { r: 22, halfChord: 20 },
+        };
+
+        // Constrain a point to stay inside the D-circle area
+        function clampToD(x, y, format, team) {
+            const { r, halfChord } = D_CIRCLE[format];
+            const centerX = 50;
+            const centerOffset = Math.sqrt(r * r - halfChord * halfChord);
+            // Team A: D at bottom (baseline y=100), center above baseline
+            // Team B: D at top (baseline y=0), center below baseline
+            const centerY = team === 'A' ? (100 - centerOffset) : centerOffset;
+            const dx = x - centerX;
+            const dy = y - centerY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            let cx = x, cy = y;
+            // If outside circle, push back to edge
+            if (dist > r) {
+                cx = centerX + (dx / dist) * r;
+                cy = centerY + (dy / dist) * r;
+            }
+            // Also keep on the correct side of the circle center (between center and baseline)
+            if (team === 'A') {
+                cy = Math.max(centerY, Math.min(100, cy));
+            } else {
+                cy = Math.min(centerY, Math.max(0, cy));
+            }
+            // Re-check after Y clamp — clamp X to circle at this Y
+            const dyAfter = cy - centerY;
+            const maxDx = Math.sqrt(Math.max(0, r * r - dyAfter * dyAfter));
+            cx = Math.max(centerX - maxDx, Math.min(centerX + maxDx, cx));
+
+            return { x: cx, y: cy };
+        }
+
+        // Keeper positions per format (in the D-circle, in front of goal)
+        const KEEPER_POSITIONS = {
+            '6v6':  { A: { x: 50, y: 93 }, B: { x: 50, y: 7 } },
+            '8v8':  { A: { x: 50, y: 93 }, B: { x: 50, y: 7 } },
+            '9v9':  { A: { x: 50, y: 93 }, B: { x: 50, y: 7 } },
+            '11v11': { A: { x: 50, y: 94 }, B: { x: 50, y: 6 } },
+        };
+
+        // Default starting positions per format
+        // 6v6: Keeper, #2 en #3 tussen keeper en middenlijn, #4 en #5 breed bij middenlijn, #6 centraal bij middenlijn
+        const DEFAULT_POSITIONS = {
+            '6v6': {
+                A: [[50,93],[30,70],[70,70],[15,52],[85,52],[50,52]],
+                B: [[50,7],[30,30],[70,30],[15,48],[85,48],[50,48]],
+            },
+        };
+
+        function generatePlayers(format) {
+            const count = GAME_FORMATS[format].players;
+            const teamA = [];
+            const teamB = [];
+            const keeperA = KEEPER_POSITIONS[format].A;
+            const keeperB = KEEPER_POSITIONS[format].B;
+            const defaultA = DEFAULT_POSITIONS[format]?.A;
+            const defaultB = DEFAULT_POSITIONS[format]?.B;
+            for (let i = 0; i < count; i++) {
+                const isKeeper = i === 0;
+                const ax = defaultA && defaultA[i] ? defaultA[i][0] : (isKeeper ? keeperA.x : 25 + ((i - 1) % 4) * 16);
+                const ay = defaultA && defaultA[i] ? defaultA[i][1] : (isKeeper ? keeperA.y : 55 + Math.floor((i - 1) / 4) * 15);
+                const bx = defaultB && defaultB[i] ? defaultB[i][0] : (isKeeper ? keeperB.x : 25 + ((i - 1) % 4) * 16);
+                const by = defaultB && defaultB[i] ? defaultB[i][1] : (isKeeper ? keeperB.y : 30 + Math.floor((i - 1) / 4) * 15);
+                teamA.push({ id: `a-${i}`, team: 'A', number: i + 1, name: isKeeper ? 'Keeper' : `Speler ${i + 1}`, isKeeper, x: ax, y: ay });
+                teamB.push({ id: `b-${i}`, team: 'B', number: i + 1, name: isKeeper ? 'Keeper' : `Speler ${i + 1}`, isKeeper, x: bx, y: by });
+            }
+            return [...teamA, ...teamB];
+        }
+
+        function applyFormation(players, formation, team) {
+            const teamPlayers = players.filter(p => p.team === team);
+            const others = players.filter(p => p.team !== team);
+            const positions = team === 'B' ? formation.map(([x, y]) => [x, 100 - y]) : formation;
+            const updated = teamPlayers.map((p, i) => ({
+                ...p,
+                // Keeper stays anchored at their fixed position
+                x: p.isKeeper ? p.x : (positions[i] ? positions[i][0] : p.x),
+                y: p.isKeeper ? p.y : (positions[i] ? positions[i][1] : p.y),
+            }));
+            return [...updated, ...others];
+        }
+
+        // ─── SVG Field Component ────────────────────────────────────
+        function HockeyField({ format, goalOption }) {
+            // All fields drawn in a 100x100 viewBox coordinate system
+            // The parent SVG handles scaling
+
+            if (format === '6v6') {
+                return (
+                    <g>
+                        {/* Grass stripes */}
+                        {[...Array(8)].map((_, i) => (
+                            <rect key={i} x={i * 12.5} y={0} width={12.5} height={100}
+                                fill={i % 2 === 0 ? '#2d8a4e' : '#34a058'} />
+                        ))}
+                        {/* Border */}
+                        <rect x={1} y={1} width={98} height={98} fill="none" stroke="white" strokeWidth={0.5} />
+                        {/* Center line */}
+                        <line x1={1} y1={50} x2={99} y2={50} stroke="white" strokeWidth={0.3} strokeDasharray="2,1" />
+                        {/* D circles (shooting circles) */}
+                        <path d={`M 30,100 A 22,22 0 0,1 70,100`} fill="none" stroke="white" strokeWidth={0.4} />
+                        <path d={`M 30,0 A 22,22 0 0,0 70,0`} fill="none" stroke="white" strokeWidth={0.4} />
+                        {/* Goals */}
+                        {goalOption === '2' ? (
+                            <>
+                                <rect x={42} y={97} width={16} height={3} fill="none" stroke="white" strokeWidth={0.5} />
+                                <rect x={42} y={0} width={16} height={3} fill="none" stroke="white" strokeWidth={0.5} />
+                            </>
+                        ) : (
+                            <>
+                                <rect x={20} y={97} width={12} height={3} fill="none" stroke="white" strokeWidth={0.5} />
+                                <rect x={68} y={97} width={12} height={3} fill="none" stroke="white" strokeWidth={0.5} />
+                                <rect x={20} y={0} width={12} height={3} fill="none" stroke="white" strokeWidth={0.5} />
+                                <rect x={68} y={0} width={12} height={3} fill="none" stroke="white" strokeWidth={0.5} />
+                            </>
+                        )}
+                        {/* Penalty spots */}
+                        <circle cx={50} cy={80} r={0.8} fill="white" />
+                        <circle cx={50} cy={20} r={0.8} fill="white" />
+                    </g>
+                );
+            }
+
+            if (format === '8v8') {
+                return (
+                    <g>
+                        {[...Array(8)].map((_, i) => (
+                            <rect key={i} x={i * 12.5} y={0} width={12.5} height={100}
+                                fill={i % 2 === 0 ? '#2d8a4e' : '#34a058'} />
+                        ))}
+                        <rect x={1} y={1} width={98} height={98} fill="none" stroke="white" strokeWidth={0.5} />
+                        {/* 23m lines */}
+                        <line x1={1} y1={25} x2={99} y2={25} stroke="white" strokeWidth={0.3} strokeDasharray="2,1" />
+                        <line x1={1} y1={75} x2={99} y2={75} stroke="white" strokeWidth={0.3} strokeDasharray="2,1" />
+                        {/* Center */}
+                        <line x1={1} y1={50} x2={99} y2={50} stroke="white" strokeWidth={0.4} />
+                        <circle cx={50} cy={50} r={0.8} fill="white" />
+                        {/* D circles */}
+                        <path d={`M 30,100 A 22,22 0 0,1 70,100`} fill="none" stroke="white" strokeWidth={0.4} />
+                        <path d={`M 30,0 A 22,22 0 0,0 70,0`} fill="none" stroke="white" strokeWidth={0.4} />
+                        {/* Goals */}
+                        <rect x={43} y={97} width={14} height={3} fill="none" stroke="white" strokeWidth={0.5} />
+                        <rect x={43} y={0} width={14} height={3} fill="none" stroke="white" strokeWidth={0.5} />
+                        {/* Penalty spots */}
+                        <circle cx={50} cy={85} r={0.8} fill="white" />
+                        <circle cx={50} cy={15} r={0.8} fill="white" />
+                    </g>
+                );
+            }
+
+            if (format === '9v9') {
+                return (
+                    <g>
+                        {[...Array(8)].map((_, i) => (
+                            <rect key={i} x={i * 12.5} y={0} width={12.5} height={100}
+                                fill={i % 2 === 0 ? '#2d8a4e' : '#34a058'} />
+                        ))}
+                        <rect x={1} y={1} width={98} height={98} fill="none" stroke="white" strokeWidth={0.5} />
+                        {/* 23m area markers */}
+                        <line x1={1} y1={20} x2={99} y2={20} stroke="white" strokeWidth={0.3} strokeDasharray="2,1" />
+                        <line x1={1} y1={80} x2={99} y2={80} stroke="white" strokeWidth={0.3} strokeDasharray="2,1" />
+                        {/* Center */}
+                        <line x1={1} y1={50} x2={99} y2={50} stroke="white" strokeWidth={0.4} />
+                        <circle cx={50} cy={50} r={0.8} fill="white" />
+                        {/* D circles */}
+                        <path d={`M 28,100 A 24,24 0 0,1 72,100`} fill="none" stroke="white" strokeWidth={0.4} />
+                        <path d={`M 28,0 A 24,24 0 0,0 72,0`} fill="none" stroke="white" strokeWidth={0.4} />
+                        {/* Goals */}
+                        <rect x={41} y={97} width={18} height={3} fill="none" stroke="white" strokeWidth={0.5} />
+                        <rect x={41} y={0} width={18} height={3} fill="none" stroke="white" strokeWidth={0.5} />
+                        {/* Penalty spots */}
+                        <circle cx={50} cy={87} r={0.8} fill="white" />
+                        <circle cx={50} cy={13} r={0.8} fill="white" />
+                    </g>
+                );
+            }
+
+            // 11v11
+            return (
+                <g>
+                    {[...Array(10)].map((_, i) => (
+                        <rect key={i} x={i * 10} y={0} width={10} height={100}
+                            fill={i % 2 === 0 ? '#2d8a4e' : '#34a058'} />
+                    ))}
+                    <rect x={1} y={1} width={98} height={98} fill="none" stroke="white" strokeWidth={0.4} />
+                    {/* Center */}
+                    <line x1={1} y1={50} x2={99} y2={50} stroke="white" strokeWidth={0.4} />
+                    <circle cx={50} cy={50} r={7} fill="none" stroke="white" strokeWidth={0.3} />
+                    <circle cx={50} cy={50} r={0.7} fill="white" />
+                    {/* 23m lines */}
+                    <line x1={1} y1={23} x2={99} y2={23} stroke="white" strokeWidth={0.3} strokeDasharray="2,1" />
+                    <line x1={1} y1={77} x2={99} y2={77} stroke="white" strokeWidth={0.3} strokeDasharray="2,1" />
+                    {/* D circles */}
+                    <path d={`M 30,100 A 22,22 0 0,1 70,100`} fill="none" stroke="white" strokeWidth={0.4} />
+                    <path d={`M 30,0 A 22,22 0 0,0 70,0`} fill="none" stroke="white" strokeWidth={0.4} />
+                    {/* 5m lines in D */}
+                    <line x1={38} y1={100} x2={38} y2={95} stroke="white" strokeWidth={0.2} />
+                    <line x1={62} y1={100} x2={62} y2={95} stroke="white" strokeWidth={0.2} />
+                    <line x1={38} y1={0} x2={38} y2={5} stroke="white" strokeWidth={0.2} />
+                    <line x1={62} y1={0} x2={62} y2={5} stroke="white" strokeWidth={0.2} />
+                    {/* Goals */}
+                    <rect x={42} y={97.5} width={16} height={2.5} fill="none" stroke="white" strokeWidth={0.5} />
+                    <rect x={42} y={0} width={16} height={2.5} fill="none" stroke="white" strokeWidth={0.5} />
+                    {/* Penalty spots */}
+                    <circle cx={50} cy={88} r={0.7} fill="white" />
+                    <circle cx={50} cy={12} r={0.7} fill="white" />
+                </g>
+            );
+        }
+
+        // ─── Player Icon Component ──────────────────────────────────
+        function PlayerIcon({ player, svgRef, onMove, onEdit, scale, isAnimating, format, hasBall, ballMode, onBallAssign }) {
+            const [dragging, setDragging] = useState(false);
+            const dragOffset = useRef({ x: 0, y: 0 });
+            const playerRef = useRef(null);
+
+            const getSVGPoint = useCallback((clientX, clientY) => {
+                const svg = svgRef.current;
+                if (!svg) return { x: 0, y: 0 };
+                const pt = svg.createSVGPoint();
+                pt.x = clientX;
+                pt.y = clientY;
+                const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+                return svgP;
+            }, [svgRef]);
+
+            const handlePointerDown = useCallback((e) => {
+                if (isAnimating) return;
+                // Ball mode: single click assigns ball
+                if (ballMode) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onBallAssign(player.id);
+                    return;
+                }
+                e.stopPropagation();
+                e.preventDefault();
+                const svgP = getSVGPoint(e.clientX, e.clientY);
+                dragOffset.current = { x: svgP.x - player.x, y: svgP.y - player.y };
+                setDragging(true);
+                if (playerRef.current) {
+                    playerRef.current.setPointerCapture(e.pointerId);
+                }
+            }, [player, getSVGPoint, isAnimating, ballMode, onBallAssign]);
+
+            const handlePointerMove = useCallback((e) => {
+                if (!dragging) return;
+                e.preventDefault();
+                const svgP = getSVGPoint(e.clientX, e.clientY);
+                let newX = Math.max(3, Math.min(97, svgP.x - dragOffset.current.x));
+                let newY = Math.max(3, Math.min(97, svgP.y - dragOffset.current.y));
+                // Keeper: constrain to D-circle
+                if (player.isKeeper) {
+                    const clamped = clampToD(newX, newY, format, player.team);
+                    newX = clamped.x;
+                    newY = clamped.y;
+                }
+                onMove(player.id, newX, newY);
+            }, [dragging, player.id, player.isKeeper, player.team, format, getSVGPoint, onMove]);
+
+            const handlePointerUp = useCallback((e) => {
+                setDragging(false);
+                if (playerRef.current) {
+                    playerRef.current.releasePointerCapture(e.pointerId);
+                }
+            }, []);
+
+            const color = player.team === 'A' ? '#ff6b2b' : '#2563eb';
+            const colorLight = player.team === 'A' ? '#ff8f5e' : '#5b8def';
+            const r = Math.max(2.5, 3.5 * scale);
+            const fontSize = Math.max(1.8, 2.6 * scale);
+            const strokeColor = player.isKeeper ? '#000000' : 'white';
+            const strokeW = player.isKeeper ? 0.7 : 0.4;
+
+            return (
+                <g
+                    ref={playerRef}
+                    className={`player-icon ${dragging ? 'dragging' : ''}`}
+                    transform={`translate(${player.x}, ${player.y})`}
+                    onPointerDown={handlePointerDown}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onDoubleClick={(e) => { e.stopPropagation(); onEdit(player); }}
+                    style={{ transition: isAnimating ? 'none' : undefined }}
+                >
+                    {/* Shadow */}
+                    <ellipse cx={0} cy={r * 0.3} rx={r * 0.8} ry={r * 0.25} fill="rgba(0,0,0,0.3)" />
+                    {/* Body */}
+                    <circle cx={0} cy={0} r={r} fill={color} stroke={strokeColor} strokeWidth={strokeW} />
+                    <circle cx={0} cy={0} r={r * 0.7} fill={colorLight} opacity={0.3} />
+                    {/* Number */}
+                    <text x={0} y={fontSize * 0.35} textAnchor="middle" fill="white"
+                        fontSize={fontSize} fontWeight="bold" style={{ pointerEvents: 'none', userSelect: 'none' }}>
+                        {player.number}
+                    </text>
+                    {/* Name label */}
+                    <text x={0} y={-r - 1} textAnchor="middle" fill="white"
+                        fontSize={fontSize * 0.6} fontWeight="500"
+                        style={{ pointerEvents: 'none', userSelect: 'none', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>
+                        {player.name.length > 8 ? player.name.slice(0, 8) + '..' : player.name}
+                    </text>
+                    {/* Ball mode highlight ring */}
+                    {ballMode && (
+                        <circle cx={0} cy={0} r={r + 0.8} fill="none" stroke="#facc15" strokeWidth={0.4} strokeDasharray="1.5,1" opacity={0.7} />
+                    )}
+                </g>
+            );
+        }
+
+        // ─── Ball Component ──────────────────────────────────────────
+        function Ball({ x, y, scale }) {
+            const r = Math.max(1.2, 1.6 * scale);
+            return (
+                <g transform={`translate(${x}, ${y})`} style={{ pointerEvents: 'none' }}>
+                    {/* Ball shadow */}
+                    <ellipse cx={0.3} cy={r + 0.3} rx={r * 0.6} ry={r * 0.2} fill="rgba(0,0,0,0.3)" />
+                    {/* Ball body */}
+                    <circle cx={0} cy={0} r={r} fill="white" stroke="#333" strokeWidth={0.25} />
+                    {/* Ball dimples/pattern */}
+                    <circle cx={-r * 0.25} cy={-r * 0.2} r={r * 0.25} fill="none" stroke="#ccc" strokeWidth={0.15} />
+                    <circle cx={r * 0.3} cy={r * 0.15} r={r * 0.2} fill="none" stroke="#ccc" strokeWidth={0.15} />
+                    <circle cx={-r * 0.1} cy={r * 0.35} r={r * 0.18} fill="none" stroke="#ccc" strokeWidth={0.15} />
+                </g>
+            );
+        }
+
+        // ─── Drawing Layer ──────────────────────────────────────────
+        function DrawingLayer({ drawings, currentPath, drawMode, drawColor }) {
+            const renderArrowHead = (x1, y1, x2, y2, color) => {
+                const angle = Math.atan2(y2 - y1, x2 - x1);
+                const len = 2.5;
+                const p1x = x2 - len * Math.cos(angle - 0.4);
+                const p1y = y2 - len * Math.sin(angle - 0.4);
+                const p2x = x2 - len * Math.cos(angle + 0.4);
+                const p2y = y2 - len * Math.sin(angle + 0.4);
+                return <polygon points={`${x2},${y2} ${p1x},${p1y} ${p2x},${p2y}`} fill={color} />;
+            };
+
+            return (
+                <g className="drawing-line">
+                    {drawings.map((d, i) => {
+                        if (d.points.length < 2) return null;
+                        const pathStr = d.points.map((p, j) => `${j === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+                        const last = d.points[d.points.length - 1];
+                        const prev = d.points[d.points.length - 2];
+                        return (
+                            <g key={i}>
+                                <path d={pathStr} fill="none" stroke={d.color} strokeWidth={d.type === 'arrow' ? 0.7 : 0.5}
+                                    strokeLinecap="round" strokeLinejoin="round"
+                                    strokeDasharray={d.type === 'line' ? '2,1' : 'none'}
+                                    opacity={0.85} />
+                                {d.type === 'arrow' && renderArrowHead(prev.x, prev.y, last.x, last.y, d.color)}
+                            </g>
+                        );
+                    })}
+                    {currentPath && currentPath.length >= 2 && (() => {
+                        const pathStr = currentPath.map((p, j) => `${j === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+                        const last = currentPath[currentPath.length - 1];
+                        const prev = currentPath[currentPath.length - 2];
+                        return (
+                            <g>
+                                <path d={pathStr} fill="none" stroke={drawColor} strokeWidth={drawMode === 'arrow' ? 0.7 : 0.5}
+                                    strokeLinecap="round" strokeLinejoin="round"
+                                    strokeDasharray={drawMode === 'line' ? '2,1' : 'none'}
+                                    opacity={0.85} />
+                                {drawMode === 'arrow' && renderArrowHead(prev.x, prev.y, last.x, last.y, drawColor)}
+                            </g>
+                        );
+                    })()}
+                </g>
+            );
+        }
+
+        // ─── Edit Modal ─────────────────────────────────────────────
+        function EditModal({ player, onSave, onClose }) {
+            const [name, setName] = useState(player.name);
+            const [number, setNumber] = useState(player.number);
+            return (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+                    <div className="bg-dark-700 rounded-xl p-5 w-full max-w-xs shadow-2xl border border-dark-500"
+                        onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-bold mb-4 text-center">
+                            <span className={player.team === 'A' ? 'text-teamA' : 'text-teamB'}>
+                                {player.team === 'A' ? 'Team A' : 'Team B'}
+                            </span> - Speler bewerken
+                        </h3>
+                        <label className="block text-sm text-gray-400 mb-1">Naam</label>
+                        <input className="w-full bg-dark-800 border border-dark-500 rounded-lg px-3 py-2 mb-3 text-white focus:outline-none focus:border-teamA"
+                            value={name} onChange={e => setName(e.target.value)} maxLength={20} />
+                        <label className="block text-sm text-gray-400 mb-1">Rugnummer</label>
+                        <input type="number" min={1} max={99}
+                            className="w-full bg-dark-800 border border-dark-500 rounded-lg px-3 py-2 mb-4 text-white focus:outline-none focus:border-teamA"
+                            value={number} onChange={e => setNumber(parseInt(e.target.value) || 1)} />
+                        <div className="flex gap-2">
+                            <button className="flex-1 py-2 rounded-lg bg-dark-500 hover:bg-dark-600 transition" onClick={onClose}>Annuleer</button>
+                            <button className="flex-1 py-2 rounded-lg bg-teamA hover:bg-teamA-light transition font-semibold"
+                                onClick={() => onSave({ ...player, name, number })}>Opslaan</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ─── Main App ───────────────────────────────────────────────
+        function App() {
+            const [format, setFormat] = useState('6v6');
+            const [goalOption, setGoalOption] = useState('2');
+            const [players, setPlayers] = useState(() => generatePlayers('6v6'));
+            const [drawMode, setDrawMode] = useState(null); // null | 'line' | 'arrow'
+            const [drawColor, setDrawColor] = useState('#ffffff');
+            const [drawings, setDrawings] = useState([]);
+            const [currentPath, setCurrentPath] = useState(null);
+            const [editingPlayer, setEditingPlayer] = useState(null);
+            // Multi-frame timeline (up to 8 frames)
+            const [frames, setFrames] = useState([]);
+            const [activeFrame, setActiveFrame] = useState(0);
+            const [isAnimating, setIsAnimating] = useState(false);
+            const [animSpeed, setAnimSpeed] = useState(1); // 0.5x, 1x, 2x
+            const [animLoop, setAnimLoop] = useState(false);
+            const [showSidebar, setShowSidebar] = useState(false);
+            const [showSimLibrary, setShowSimLibrary] = useState(false);
+            const [notification, setNotification] = useState(null);
+            const [activeSimName, setActiveSimName] = useState(null);
+            // Ball system: which player has the ball (a-5 = Team A speler #6)
+            const [ballOwner, setBallOwner] = useState('a-5'); // player id
+            const [ballPos, setBallPos] = useState(null); // {x,y} during animation pass
+            const [ballMode, setBallMode] = useState(false); // click-to-assign mode
+            // Saved simulations (localStorage)
+            const [savedSims, setSavedSims] = useState(() => {
+                try { return JSON.parse(localStorage.getItem('hockeyTacticsSavedSims') || '{}'); } catch { return {}; }
+            });
+            const [showSaveModal, setShowSaveModal] = useState(false);
+            const [saveSimName, setSaveSimName] = useState('');
+            const svgRef = useRef(null);
+            const fieldRef = useRef(null);
+            const animRef = useRef(null);
+
+            const playerScale = useMemo(() => {
+                if (format === '6v6') return 1.1;
+                if (format === '8v8') return 1;
+                if (format === '9v9') return 0.95;
+                return 0.85;
+            }, [format]);
+
+            const notify = useCallback((msg) => {
+                setNotification(msg);
+                setTimeout(() => setNotification(null), 2000);
+            }, []);
+
+            // Format change
+            const changeFormat = useCallback((f) => {
+                setFormat(f);
+                setPlayers(generatePlayers(f));
+                setDrawings([]);
+                setFrames([]);
+                setActiveFrame(0);
+                setActiveSimName(null);
+                setBallOwner(f === '6v6' ? 'a-5' : 'a-0');
+                setBallPos(null);
+                setBallMode(false);
+            }, []);
+
+            // Player move
+            const movePlayer = useCallback((id, x, y) => {
+                setPlayers(prev => prev.map(p => p.id === id ? { ...p, x, y } : p));
+            }, []);
+
+            // Player edit
+            const savePlayer = useCallback((updated) => {
+                setPlayers(prev => prev.map(p => p.id === updated.id ? updated : p));
+                setEditingPlayer(null);
+            }, []);
+
+            // Apply formation
+            const applyFormationPreset = useCallback((formationKey, team) => {
+                const positions = FORMATIONS[format]?.[formationKey];
+                if (!positions) return;
+                setPlayers(prev => applyFormation(prev, positions, team));
+                notify(`Formatie ${formationKey} toegepast op Team ${team}`);
+            }, [format, notify]);
+
+            // Drawing handlers
+            const getSVGPoint = useCallback((clientX, clientY) => {
+                const svg = svgRef.current;
+                if (!svg) return { x: 0, y: 0 };
+                const pt = svg.createSVGPoint();
+                pt.x = clientX;
+                pt.y = clientY;
+                return pt.matrixTransform(svg.getScreenCTM().inverse());
+            }, []);
+
+            const handleFieldPointerDown = useCallback((e) => {
+                if (!drawMode || isAnimating) return;
+                const p = getSVGPoint(e.clientX, e.clientY);
+                setCurrentPath([{ x: p.x, y: p.y }]);
+            }, [drawMode, getSVGPoint, isAnimating]);
+
+            const handleFieldPointerMove = useCallback((e) => {
+                if (!currentPath || !drawMode) return;
+                const p = getSVGPoint(e.clientX, e.clientY);
+                setCurrentPath(prev => {
+                    if (!prev) return null;
+                    // Subsample to reduce points
+                    const last = prev[prev.length - 1];
+                    const dist = Math.sqrt((p.x - last.x) ** 2 + (p.y - last.y) ** 2);
+                    if (dist < 1) return prev;
+                    return [...prev, { x: p.x, y: p.y }];
+                });
+            }, [currentPath, drawMode, getSVGPoint]);
+
+            const handleFieldPointerUp = useCallback(() => {
+                if (currentPath && currentPath.length >= 2) {
+                    setDrawings(prev => [...prev, { points: currentPath, color: drawColor, type: drawMode }]);
+                }
+                setCurrentPath(null);
+            }, [currentPath, drawColor, drawMode]);
+
+            // Multi-frame system (each frame = { players: [...], ballOwner: 'id' })
+            const saveFrame = useCallback(() => {
+                if (frames.length >= 8) { notify('Max 8 frames bereikt'); return; }
+                const snapshot = { players: players.map(p => ({ ...p })), ballOwner };
+                setFrames(prev => [...prev, snapshot]);
+                setActiveFrame(frames.length);
+                notify(`Frame ${frames.length + 1} opgeslagen`);
+            }, [players, frames, ballOwner, notify]);
+
+            const updateFrame = useCallback((idx) => {
+                const snapshot = { players: players.map(p => ({ ...p })), ballOwner };
+                setFrames(prev => prev.map((f, i) => i === idx ? snapshot : f));
+                notify(`Frame ${idx + 1} bijgewerkt`);
+            }, [players, ballOwner, notify]);
+
+            const deleteFrame = useCallback((idx) => {
+                setFrames(prev => prev.filter((_, i) => i !== idx));
+                setActiveFrame(af => Math.max(0, Math.min(af, frames.length - 2)));
+                notify(`Frame ${idx + 1} verwijderd`);
+            }, [frames, notify]);
+
+            const loadFrame = useCallback((idx) => {
+                if (frames[idx]) {
+                    const f = frames[idx];
+                    // Support both old format (array) and new format ({players, ballOwner})
+                    const fp = Array.isArray(f) ? f : f.players;
+                    const fb = Array.isArray(f) ? ballOwner : (f.ballOwner || 'a-0');
+                    setPlayers(fp.map(p => ({ ...p })));
+                    setBallOwner(fb);
+                    setActiveFrame(idx);
+                }
+            }, [frames, ballOwner]);
+
+            const clearAllFrames = useCallback(() => {
+                setFrames([]);
+                setActiveFrame(0);
+                setActiveSimName(null);
+                setBallOwner('a-0');
+                notify('Alle frames gewist');
+            }, [notify]);
+
+            // Save simulation to localStorage
+            const saveSimulation = useCallback((name) => {
+                if (!name.trim() || frames.length < 1) return;
+                const count = GAME_FORMATS[format].players;
+                const simFrames = frames.map(f => {
+                    const fd = Array.isArray(f) ? { players: f, ballOwner: 'a-0' } : f;
+                    const A = [], B = [];
+                    fd.players.forEach(p => {
+                        if (p.team === 'A') A[parseInt(p.id.split('-')[1])] = [Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10];
+                        else B[parseInt(p.id.split('-')[1])] = [Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10];
+                    });
+                    return { A, B, ball: fd.ballOwner };
+                });
+                const sim = { name: name.trim(), desc: `Eigen simulatie (${simFrames.length} frames)`, icon: '💾', frames: simFrames };
+                setSavedSims(prev => {
+                    const next = { ...prev, [format]: [...(prev[format] || []), sim] };
+                    localStorage.setItem('hockeyTacticsSavedSims', JSON.stringify(next));
+                    return next;
+                });
+                setActiveSimName(name.trim());
+                notify(`Simulatie "${name.trim()}" opgeslagen!`);
+                setShowSaveModal(false);
+                setSaveSimName('');
+            }, [frames, format, notify]);
+
+            const deleteSavedSim = useCallback((formatKey, idx) => {
+                setSavedSims(prev => {
+                    const list = [...(prev[formatKey] || [])];
+                    list.splice(idx, 1);
+                    const next = { ...prev, [formatKey]: list };
+                    localStorage.setItem('hockeyTacticsSavedSims', JSON.stringify(next));
+                    return next;
+                });
+                notify('Simulatie verwijderd');
+            }, [notify]);
+
+            // Load example simulation
+            const loadSimulation = useCallback((sim) => {
+                const count = GAME_FORMATS[format].players;
+                const newFrames = sim.frames.map((frame, fi) => {
+                    const result = [];
+                    for (let i = 0; i < count; i++) {
+                        const isKeeper = i === 0;
+                        result.push({
+                            id: `a-${i}`, team: 'A', number: i + 1,
+                            name: isKeeper ? 'Keeper' : `Speler ${i + 1}`,
+                            isKeeper,
+                            x: frame.A[i] ? frame.A[i][0] : 50,
+                            y: frame.A[i] ? frame.A[i][1] : 50,
+                        });
+                    }
+                    for (let i = 0; i < count; i++) {
+                        const isKeeper = i === 0;
+                        result.push({
+                            id: `b-${i}`, team: 'B', number: i + 1,
+                            name: isKeeper ? 'Keeper' : `Speler ${i + 1}`,
+                            isKeeper,
+                            x: frame.B[i] ? frame.B[i][0] : 50,
+                            y: frame.B[i] ? frame.B[i][1] : 50,
+                        });
+                    }
+                    // ballOwner from simulation data, default to a-1 (first field player Team A)
+                    const bo = frame.ball || 'a-1';
+                    return { players: result, ballOwner: bo };
+                });
+                setFrames(newFrames);
+                setActiveFrame(0);
+                if (newFrames[0]) {
+                    setPlayers(newFrames[0].players.map(p => ({ ...p })));
+                    setBallOwner(newFrames[0].ballOwner);
+                }
+                setBallPos(null);
+                setDrawings([]);
+                setActiveSimName(sim.name);
+                setShowSimLibrary(false);
+                notify(`Simulatie "${sim.name}" geladen`);
+            }, [format, notify]);
+
+            // Helper to get frame data (supports old array and new {players, ballOwner} format)
+            const getFrameData = useCallback((frame) => {
+                if (Array.isArray(frame)) return { players: frame, ballOwner: 'a-1' };
+                return { players: frame.players, ballOwner: frame.ballOwner || 'a-1' };
+            }, []);
+
+            // Animation - multi-frame sequential with ball passing
+            const playAnimation = useCallback(() => {
+                if (frames.length < 2) {
+                    notify('Minimaal 2 frames nodig!');
+                    return;
+                }
+                setIsAnimating(true);
+                setBallPos(null);
+                const segmentDuration = 1200 / animSpeed;
+                const totalSegments = frames.length - 1;
+                const startTime = performance.now();
+
+                const animate = (time) => {
+                    const elapsed = time - startTime;
+                    const totalDuration = segmentDuration * totalSegments;
+                    let t = elapsed / totalDuration;
+
+                    if (t >= 1) {
+                        if (animLoop) {
+                            t = t % 1;
+                        } else {
+                            const lastFrame = getFrameData(frames[frames.length - 1]);
+                            setPlayers(lastFrame.players.map(p => ({ ...p })));
+                            setBallOwner(lastFrame.ballOwner);
+                            setBallPos(null);
+                            setActiveFrame(frames.length - 1);
+                            setIsAnimating(false);
+                            return;
+                        }
+                    }
+
+                    const segFloat = t * totalSegments;
+                    const segIndex = Math.min(Math.floor(segFloat), totalSegments - 1);
+                    const segProgress = segFloat - segIndex;
+                    const ease = segProgress < 0.5
+                        ? 2 * segProgress * segProgress
+                        : 1 - Math.pow(-2 * segProgress + 2, 2) / 2;
+
+                    const sf = getFrameData(frames[segIndex]);
+                    const ef = getFrameData(frames[segIndex + 1]);
+                    setActiveFrame(segIndex);
+
+                    // Interpolate player positions
+                    const interpolated = sf.players.map((sp, i) => {
+                        const ep = ef.players[i];
+                        return {
+                            ...sp,
+                            x: sp.x + (ep.x - sp.x) * ease,
+                            y: sp.y + (ep.y - sp.y) * ease,
+                        };
+                    });
+                    setPlayers(interpolated);
+
+                    // Ball: if owner changes between frames, animate ball pass
+                    if (sf.ballOwner !== ef.ballOwner) {
+                        // Ball passes quickly in the first 40% of the segment
+                        const passProgress = Math.min(segProgress / 0.4, 1);
+                        const passEase = passProgress < 0.5
+                            ? 2 * passProgress * passProgress
+                            : 1 - Math.pow(-2 * passProgress + 2, 2) / 2;
+
+                        const fromPlayer = interpolated.find(p => p.id === sf.ballOwner) || interpolated[0];
+                        const toPlayer = interpolated.find(p => p.id === ef.ballOwner) || interpolated[0];
+
+                        if (passProgress < 1) {
+                            // Ball is in flight
+                            setBallPos({
+                                x: fromPlayer.x + (toPlayer.x - fromPlayer.x) * passEase,
+                                y: fromPlayer.y + (toPlayer.y - fromPlayer.y) * passEase,
+                            });
+                            setBallOwner(sf.ballOwner);
+                        } else {
+                            // Ball arrived at new owner
+                            setBallPos(null);
+                            setBallOwner(ef.ballOwner);
+                        }
+                    } else {
+                        setBallPos(null);
+                        setBallOwner(sf.ballOwner);
+                    }
+
+                    animRef.current = requestAnimationFrame(animate);
+                };
+                animRef.current = requestAnimationFrame(animate);
+            }, [frames, animSpeed, animLoop, notify, getFrameData]);
+
+            const stopAnimation = useCallback(() => {
+                if (animRef.current) cancelAnimationFrame(animRef.current);
+                setIsAnimating(false);
+                setBallPos(null);
+            }, []);
+
+            // Replay: load frame 1 and play from the start
+            const replayAnimation = useCallback(() => {
+                if (frames.length < 2) return;
+                // Stop any running animation
+                if (animRef.current) cancelAnimationFrame(animRef.current);
+                setIsAnimating(false);
+                setBallPos(null);
+                // Load frame 1
+                const f = frames[0];
+                const fp = Array.isArray(f) ? f : f.players;
+                const fb = Array.isArray(f) ? 'a-0' : (f.ballOwner || 'a-0');
+                setPlayers(fp.map(p => ({ ...p })));
+                setBallOwner(fb);
+                setActiveFrame(0);
+                // Start playback after a tiny delay so state settles
+                setTimeout(() => playAnimation(), 50);
+            }, [frames, playAnimation]);
+
+            useEffect(() => {
+                return () => {
+                    if (animRef.current) cancelAnimationFrame(animRef.current);
+                };
+            }, []);
+
+            // Export PNG
+            const exportPNG = useCallback(async () => {
+                if (!fieldRef.current) return;
+                try {
+                    const dataUrl = await htmlToImage.toPng(fieldRef.current, {
+                        backgroundColor: '#1a1d23',
+                        pixelRatio: 2,
+                    });
+                    const link = document.createElement('a');
+                    link.download = `HockeyTactics_${format}_${Date.now()}.png`;
+                    link.href = dataUrl;
+                    link.click();
+                    notify('PNG gedownload!');
+                } catch (err) {
+                    console.error(err);
+                    notify('Export mislukt');
+                }
+            }, [format, notify]);
+
+            const currentFormations = FORMATIONS[format] || {};
+
+            return (
+                <div className="h-screen flex flex-col bg-dark-800">
+                    {/* Header */}
+                    <header className="flex items-center justify-between px-3 py-2 bg-dark-700 border-b border-dark-500 shrink-0">
+                        <div className="flex items-center gap-2">
+                            <button className="lg:hidden p-1.5 rounded-lg bg-dark-600 hover:bg-dark-500 transition"
+                                onClick={() => setShowSidebar(!showSidebar)}>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+                                </svg>
+                            </button>
+                            <div className="flex items-center gap-2">
+                                <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+                                    <circle cx="16" cy="16" r="14" fill="#ff6b2b" />
+                                    <path d="M10 22 L16 8 L22 22" stroke="white" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <circle cx="16" cy="12" r="3" fill="white" opacity="0.9"/>
+                                </svg>
+                                <div>
+                                    <h1 className="text-base font-extrabold tracking-tight leading-none">HockeyTactics <span className="text-teamA">Pro</span></h1>
+                                    <p className="text-[10px] text-gray-500 leading-none hidden sm:block">Tactisch Bord voor Coaches</p>
+                                </div>
+                            </div>
+                        </div>
+                        {/* Format selector */}
+                        <div className="flex gap-1">
+                            {Object.entries(GAME_FORMATS).map(([key, val]) => (
+                                <button key={key}
+                                    className={`px-2 py-1 text-xs font-semibold rounded-lg transition ${format === key ? 'bg-teamA text-white' : 'bg-dark-600 text-gray-400 hover:bg-dark-500'}`}
+                                    onClick={() => changeFormat(key)}>
+                                    {key}
+                                </button>
+                            ))}
+                        </div>
+                        {/* Export */}
+                        <button className="flex items-center gap-1 px-3 py-1.5 bg-dark-600 hover:bg-dark-500 rounded-lg text-xs font-semibold transition"
+                            onClick={exportPNG}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            PNG
+                        </button>
+                    </header>
+
+                    <div className="flex flex-1 overflow-hidden">
+                        {/* Sidebar */}
+                        <aside className={`${showSidebar ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:static inset-y-0 left-0 z-40 w-64 bg-dark-700 border-r border-dark-500 flex flex-col overflow-y-auto transition-transform duration-200`}
+                            style={{ top: '49px' }}>
+                            <div className="p-3 space-y-4">
+                                {/* Game info */}
+                                <div className="bg-dark-600 rounded-lg p-3">
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Spelvorm</h3>
+                                    <p className="text-sm font-semibold">{GAME_FORMATS[format].label}</p>
+                                    <p className="text-xs text-gray-500">{GAME_FORMATS[format].desc}</p>
+                                    {format === '6v6' && (
+                                        <div className="mt-2 flex gap-1">
+                                            <button className={`px-2 py-1 text-xs rounded ${goalOption === '2' ? 'bg-teamA text-white' : 'bg-dark-500 text-gray-400'}`}
+                                                onClick={() => setGoalOption('2')}>2 doelen</button>
+                                            <button className={`px-2 py-1 text-xs rounded ${goalOption === '4' ? 'bg-teamA text-white' : 'bg-dark-500 text-gray-400'}`}
+                                                onClick={() => setGoalOption('4')}>4 doelen</button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Formations */}
+                                <div className="bg-dark-600 rounded-lg p-3">
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Formaties</h3>
+                                    <div className="space-y-2">
+                                        <div>
+                                            <p className="text-xs text-teamA font-semibold mb-1">Team A (Oranje)</p>
+                                            <div className="flex flex-wrap gap-1">
+                                                {Object.keys(currentFormations).map(f => (
+                                                    <button key={f} className="px-2 py-1 text-xs bg-dark-500 hover:bg-teamA/30 rounded transition font-mono"
+                                                        onClick={() => applyFormationPreset(f, 'A')}>{f}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-teamB font-semibold mb-1">Team B (Blauw)</p>
+                                            <div className="flex flex-wrap gap-1">
+                                                {Object.keys(currentFormations).map(f => (
+                                                    <button key={f} className="px-2 py-1 text-xs bg-dark-500 hover:bg-teamB/30 rounded transition font-mono"
+                                                        onClick={() => applyFormationPreset(f, 'B')}>{f}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Drawing tools */}
+                                <div className="bg-dark-600 rounded-lg p-3">
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Tekenen</h3>
+                                    <div className="flex gap-1 mb-2">
+                                        <button className={`toolbar-btn flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold ${drawMode === 'line' ? 'active bg-dark-500' : 'bg-dark-800 hover:bg-dark-500'}`}
+                                            onClick={() => setDrawMode(drawMode === 'line' ? null : 'line')}>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4,3">
+                                                <line x1="4" y1="20" x2="20" y2="4"/>
+                                            </svg>
+                                            Pass
+                                        </button>
+                                        <button className={`toolbar-btn flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold ${drawMode === 'arrow' ? 'active bg-dark-500' : 'bg-dark-800 hover:bg-dark-500'}`}
+                                            onClick={() => setDrawMode(drawMode === 'arrow' ? null : 'arrow')}>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <line x1="5" y1="19" x2="19" y2="5"/><polyline points="14 5 19 5 19 10"/>
+                                            </svg>
+                                            Loop
+                                        </button>
+                                    </div>
+                                    <div className="flex gap-1.5 items-center">
+                                        <span className="text-[10px] text-gray-500">Kleur:</span>
+                                        {DRAW_COLORS.map(c => (
+                                            <button key={c.value}
+                                                className={`w-5 h-5 rounded-full border-2 transition ${drawColor === c.value ? 'border-white scale-110' : 'border-transparent hover:border-gray-500'}`}
+                                                style={{ backgroundColor: c.value }}
+                                                onClick={() => setDrawColor(c.value)}
+                                                title={c.name} />
+                                        ))}
+                                    </div>
+                                    {drawings.length > 0 && (
+                                        <button className="mt-2 w-full py-1 text-xs bg-red-900/40 hover:bg-red-900/60 rounded text-red-400 transition"
+                                            onClick={() => setDrawings([])}>
+                                            Tekeningen wissen
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Ball control */}
+                                <div className="bg-dark-600 rounded-lg p-3">
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Bal</h3>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                            <svg width="14" height="14" viewBox="0 0 20 20">
+                                                <circle cx="10" cy="10" r="8" fill="white" stroke="#333" strokeWidth="1.5"/>
+                                                <circle cx="7" cy="8" r="2" fill="none" stroke="#ccc" strokeWidth="0.8"/>
+                                                <circle cx="13" cy="11" r="1.8" fill="none" stroke="#ccc" strokeWidth="0.8"/>
+                                            </svg>
+                                            <span className="text-xs text-gray-300 truncate">
+                                                {(() => {
+                                                    const owner = players.find(p => p.id === ballOwner);
+                                                    return owner ? `${owner.name} (#${owner.number})` : 'Geen';
+                                                })()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <button className={`w-full py-1.5 text-xs rounded-lg font-semibold transition flex items-center justify-center gap-1.5 ${ballMode ? 'bg-yellow-600 text-white' : 'bg-dark-800 hover:bg-dark-500'}`}
+                                        onClick={() => setBallMode(!ballMode)}>
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/>
+                                        </svg>
+                                        {ballMode ? 'Klik op een speler...' : 'Bal toewijzen aan speler'}
+                                    </button>
+                                    {ballMode && (
+                                        <p className="mt-1 text-[10px] text-yellow-400 text-center">Klik op een speler om de bal toe te wijzen</p>
+                                    )}
+                                </div>
+
+                                {/* Simulation Library */}
+                                <div className="bg-dark-600 rounded-lg p-3">
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Simulatie Bibliotheek</h3>
+                                    {activeSimName && (
+                                        <div className="mb-2 px-2 py-1 bg-teamA/20 rounded text-xs text-teamA font-semibold flex items-center gap-1">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                            {activeSimName}
+                                        </div>
+                                    )}
+                                    <button className="w-full py-2 rounded-lg text-xs font-semibold bg-dark-800 hover:bg-dark-500 transition flex items-center justify-center gap-2"
+                                        onClick={() => setShowSimLibrary(true)}>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+                                        </svg>
+                                        Voorbeeld Simulaties Openen
+                                    </button>
+                                </div>
+
+                                {/* Timeline / Frames */}
+                                <div className="bg-dark-600 rounded-lg p-3">
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                                        Timeline <span className="text-gray-500 font-normal">({frames.length}/8 frames)</span>
+                                    </h3>
+                                    {/* Frame chips */}
+                                    {frames.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mb-2">
+                                            {frames.map((_, idx) => (
+                                                <div key={idx} className="flex items-center gap-0.5">
+                                                    <button
+                                                        className={`px-2 py-1 text-xs rounded-l font-bold transition ${activeFrame === idx ? 'bg-teamA text-white' : 'bg-dark-800 text-gray-400 hover:bg-dark-500'}`}
+                                                        onClick={() => loadFrame(idx)}>
+                                                        F{idx + 1}
+                                                    </button>
+                                                    <button
+                                                        className="px-1 py-1 text-xs rounded-r bg-dark-800 text-gray-500 hover:text-red-400 hover:bg-red-900/30 transition"
+                                                        onClick={() => deleteFrame(idx)} title="Verwijder frame">
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {/* Progress bar */}
+                                    {frames.length >= 2 && (
+                                        <div className="flex items-center gap-1 mb-2">
+                                            {frames.map((_, idx) => (
+                                                <React.Fragment key={idx}>
+                                                    <div className={`w-2.5 h-2.5 rounded-full cursor-pointer transition ${activeFrame === idx ? 'bg-teamA scale-125' : 'bg-dark-500 hover:bg-gray-400'}`}
+                                                        onClick={() => loadFrame(idx)} />
+                                                    {idx < frames.length - 1 && (
+                                                        <div className={`flex-1 h-0.5 ${idx < activeFrame ? 'bg-teamA' : 'bg-dark-500'}`} />
+                                                    )}
+                                                </React.Fragment>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {/* Frame actions */}
+                                    <div className="flex gap-1 mb-2">
+                                        <button className="flex-1 py-1.5 text-xs rounded-lg font-semibold bg-green-900/40 text-green-400 hover:bg-green-900/60 transition disabled:opacity-30"
+                                            disabled={frames.length >= 8}
+                                            onClick={saveFrame}>
+                                            + Frame toevoegen
+                                        </button>
+                                        {frames.length > 0 && activeFrame < frames.length && (
+                                            <button className="px-2 py-1.5 text-xs rounded-lg font-semibold bg-yellow-900/30 text-yellow-400 hover:bg-yellow-900/50 transition"
+                                                onClick={() => updateFrame(activeFrame)} title="Huidige posities opslaan in dit frame">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                                                </svg>
+                                            </button>
+                                        )}
+                                    </div>
+                                    {/* Step controls */}
+                                    {frames.length >= 2 && (
+                                        <div className="flex gap-1 mb-2">
+                                            <button className="flex-1 py-1 text-xs bg-dark-800 hover:bg-dark-500 rounded-lg transition disabled:opacity-30 flex items-center justify-center gap-1"
+                                                disabled={activeFrame <= 0 || isAnimating}
+                                                onClick={() => loadFrame(activeFrame - 1)}>
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,21 5,12 19,3" /></svg>
+                                                Vorige
+                                            </button>
+                                            <button className="flex-1 py-1 text-xs bg-dark-800 hover:bg-dark-500 rounded-lg transition disabled:opacity-30 flex items-center justify-center gap-1"
+                                                disabled={activeFrame >= frames.length - 1 || isAnimating}
+                                                onClick={() => loadFrame(activeFrame + 1)}>
+                                                Volgende
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>
+                                            </button>
+                                        </div>
+                                    )}
+                                    {/* Speed & loop controls */}
+                                    {frames.length >= 2 && (
+                                        <div className="flex gap-1 items-center mb-2">
+                                            <span className="text-[10px] text-gray-500">Snelheid:</span>
+                                            {[0.5, 1, 1.5, 2].map(s => (
+                                                <button key={s}
+                                                    className={`px-1.5 py-0.5 text-[10px] rounded font-semibold transition ${animSpeed === s ? 'bg-teamA text-white' : 'bg-dark-800 text-gray-400 hover:bg-dark-500'}`}
+                                                    onClick={() => setAnimSpeed(s)}>{s}x</button>
+                                            ))}
+                                            <button
+                                                className={`ml-auto px-1.5 py-0.5 text-[10px] rounded font-semibold transition ${animLoop ? 'bg-teamA text-white' : 'bg-dark-800 text-gray-400 hover:bg-dark-500'}`}
+                                                onClick={() => setAnimLoop(!animLoop)} title="Herhalen">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                    <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                                                    <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    )}
+                                    {/* Play / Stop button */}
+                                    <div className="flex gap-1">
+                                        <button className={`flex-1 py-2 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 ${frames.length >= 2 ? 'bg-teamA hover:bg-teamA-light text-white' + (!isAnimating ? ' pulse-glow' : '') : 'bg-dark-800 text-gray-600 cursor-not-allowed'}`}
+                                            disabled={frames.length < 2}
+                                            onClick={isAnimating ? stopAnimation : playAnimation}>
+                                            {isAnimating ? (
+                                                <>
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                                                    Stop
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>
+                                                    Afspelen
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                    {frames.length > 0 && (
+                                        <button className="mt-2 w-full py-1 text-xs bg-red-900/30 hover:bg-red-900/50 rounded text-red-400 transition"
+                                            onClick={clearAllFrames}>
+                                            Alle frames wissen
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Instructions */}
+                                <div className="bg-dark-600 rounded-lg p-3 text-xs text-gray-500 space-y-1">
+                                    <p><strong className="text-gray-400">Sleep</strong> spelers naar positie</p>
+                                    <p><strong className="text-gray-400">Dubbelklik</strong> om naam/nummer te wijzigen</p>
+                                    <p><strong className="text-gray-400">Teken</strong> passen en loopacties</p>
+                                    <p><strong className="text-gray-400">Workflow:</strong> Positioneer → Frame opslaan → Herhaal → Afspelen</p>
+                                </div>
+                            </div>
+                        </aside>
+
+                        {/* Overlay for mobile sidebar */}
+                        {showSidebar && (
+                            <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={() => setShowSidebar(false)} />
+                        )}
+
+                        {/* Field area */}
+                        <main className="flex-1 flex flex-col items-center justify-center p-2 sm:p-4 overflow-hidden">
+                            {/* Action bar above field */}
+                            <div className="flex items-center gap-2 mb-1.5 shrink-0 flex-wrap justify-center">
+                                {/* Play/Stop */}
+                                {frames.length >= 2 && (
+                                    <button
+                                        className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-bold transition shadow-lg ${isAnimating ? 'bg-dark-600 text-gray-300 hover:bg-dark-500' : 'bg-teamA hover:bg-teamA-light text-white'}`}
+                                        onClick={isAnimating ? stopAnimation : replayAnimation}>
+                                        {isAnimating ? (
+                                            <>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                                                Stop
+                                            </>
+                                        ) : (
+                                            <>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>
+                                                Afspelen
+                                            </>
+                                        )}
+                                    </button>
+                                )}
+                                {/* Add frame */}
+                                <button
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition shadow-lg ${frames.length >= 8 ? 'bg-dark-700 text-gray-600 cursor-not-allowed' : 'bg-green-700 hover:bg-green-600 text-white'}`}
+                                    disabled={frames.length >= 8 || isAnimating}
+                                    onClick={saveFrame}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    Frame ({frames.length}/8)
+                                </button>
+                                {/* Ball assign */}
+                                <button
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition shadow-lg ${ballMode ? 'bg-yellow-600 text-white ring-2 ring-yellow-400' : 'bg-dark-600 hover:bg-dark-500 text-gray-300'}`}
+                                    onClick={() => setBallMode(!ballMode)}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+                                    {ballMode ? 'Klik speler...' : 'Bal toewijzen'}
+                                </button>
+                                {/* Save simulation */}
+                                {frames.length >= 2 && (
+                                    <button
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition shadow-lg bg-blue-700 hover:bg-blue-600 text-white"
+                                        onClick={() => { setSaveSimName(activeSimName || ''); setShowSaveModal(true); }}>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                                        </svg>
+                                        Opslaan
+                                    </button>
+                                )}
+                                {activeSimName && (
+                                    <span className="text-xs text-gray-400 hidden sm:inline">{activeSimName}</span>
+                                )}
+                            </div>
+                            <div ref={fieldRef} className="relative w-full h-full max-w-[700px] max-h-[calc(100vh-60px)] flex items-center justify-center">
+                                <svg
+                                    ref={svgRef}
+                                    viewBox="0 0 100 100"
+                                    className="w-full h-full rounded-lg shadow-2xl border border-dark-500"
+                                    style={{ maxHeight: 'calc(100vh - 80px)', touchAction: drawMode ? 'none' : 'auto', cursor: drawMode ? 'crosshair' : 'default' }}
+                                    preserveAspectRatio="xMidYMid meet"
+                                    onPointerDown={handleFieldPointerDown}
+                                    onPointerMove={handleFieldPointerMove}
+                                    onPointerUp={handleFieldPointerUp}
+                                    onPointerLeave={handleFieldPointerUp}
+                                >
+                                    <HockeyField format={format} goalOption={goalOption} />
+                                    <DrawingLayer drawings={drawings} currentPath={currentPath} drawMode={drawMode} drawColor={drawColor} />
+                                    {players.map(p => (
+                                        <PlayerIcon key={p.id} player={p} svgRef={svgRef} onMove={movePlayer}
+                                            onEdit={setEditingPlayer} scale={playerScale} isAnimating={isAnimating} format={format}
+                                            hasBall={ballOwner === p.id} ballMode={ballMode} onBallAssign={(id) => { setBallOwner(id); setBallMode(false); notify('Bal toegewezen'); }} />
+                                    ))}
+                                    {/* Ball */}
+                                    {(() => {
+                                        let bx, by;
+                                        if (ballPos) {
+                                            bx = ballPos.x;
+                                            by = ballPos.y;
+                                        } else {
+                                            const owner = players.find(p => p.id === ballOwner);
+                                            if (owner) {
+                                                bx = owner.x + 2.5;
+                                                by = owner.y + 2.5;
+                                            }
+                                        }
+                                        return bx != null ? <Ball x={bx} y={by} scale={playerScale} /> : null;
+                                    })()}
+                                </svg>
+
+                                {/* Field label */}
+                                <div className="absolute bottom-2 left-2 bg-black/50 text-[10px] text-gray-400 px-2 py-0.5 rounded backdrop-blur-sm">
+                                    {GAME_FORMATS[format].desc}
+                                </div>
+                            </div>
+                        </main>
+                    </div>
+
+                    {/* Simulation Library Modal */}
+                    {showSimLibrary && (
+                        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowSimLibrary(false)}>
+                            <div className="bg-dark-700 rounded-xl w-full max-w-lg max-h-[80vh] shadow-2xl border border-dark-500 flex flex-col"
+                                onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center justify-between p-4 border-b border-dark-500">
+                                    <div>
+                                        <h2 className="text-lg font-bold">Simulatie Bibliotheek</h2>
+                                        <p className="text-xs text-gray-500">{GAME_FORMATS[format].label} - Kies een voorbeeld simulatie</p>
+                                    </div>
+                                    <button className="p-1 rounded hover:bg-dark-500 transition" onClick={() => setShowSimLibrary(false)}>
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                    </button>
+                                </div>
+                                <div className="p-4 overflow-y-auto space-y-2">
+                                    {/* Saved simulations */}
+                                    {(savedSims[format] || []).length > 0 && (
+                                        <>
+                                            <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider mt-1 mb-1 flex items-center gap-1">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/></svg>
+                                                Mijn Simulaties
+                                            </h3>
+                                            {(savedSims[format] || []).map((sim, idx) => (
+                                                <div key={`saved-${idx}`} className="flex items-center gap-1">
+                                                    <button
+                                                        className="flex-1 text-left p-3 rounded-lg bg-dark-600 hover:bg-dark-500 transition border border-blue-900/40 hover:border-blue-500/50 group"
+                                                        onClick={() => loadSimulation(sim)}>
+                                                        <div className="flex items-start gap-3">
+                                                            <span className="text-2xl">{sim.icon}</span>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center justify-between">
+                                                                    <h3 className="text-sm font-bold group-hover:text-blue-400 transition">{sim.name}</h3>
+                                                                    <span className="text-[10px] text-gray-500 bg-dark-800 px-2 py-0.5 rounded-full">{sim.frames.length} frames</span>
+                                                                </div>
+                                                                <p className="text-xs text-gray-400 mt-0.5">{sim.desc}</p>
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                    <button className="p-2 rounded-lg bg-dark-600 hover:bg-red-900/50 text-gray-500 hover:text-red-400 transition shrink-0"
+                                                        onClick={() => deleteSavedSim(format, idx)} title="Verwijder simulatie">
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            <hr className="border-dark-500 my-2" />
+                                        </>
+                                    )}
+                                    {/* Example simulations */}
+                                    {(EXAMPLE_SIMULATIONS[format] || []).length > 0 && (
+                                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1 mb-1">Voorbeelden</h3>
+                                    )}
+                                    {(EXAMPLE_SIMULATIONS[format] || []).length === 0 && (savedSims[format] || []).length === 0 ? (
+                                        <p className="text-sm text-gray-500 text-center py-8">Geen simulaties beschikbaar voor dit formaat</p>
+                                    ) : (
+                                        (EXAMPLE_SIMULATIONS[format] || []).map((sim, idx) => (
+                                            <button key={idx}
+                                                className="w-full text-left p-3 rounded-lg bg-dark-600 hover:bg-dark-500 transition border border-transparent hover:border-teamA/40 group"
+                                                onClick={() => loadSimulation(sim)}>
+                                                <div className="flex items-start gap-3">
+                                                    <span className="text-2xl">{sim.icon}</span>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center justify-between">
+                                                            <h3 className="text-sm font-bold group-hover:text-teamA transition">{sim.name}</h3>
+                                                            <span className="text-[10px] text-gray-500 bg-dark-800 px-2 py-0.5 rounded-full">{sim.frames.length} frames</span>
+                                                        </div>
+                                                        <p className="text-xs text-gray-400 mt-0.5">{sim.desc}</p>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        ))
+                                    )}
+                                </div>
+                                <div className="p-3 border-t border-dark-500 text-center">
+                                    <p className="text-[10px] text-gray-500">Selecteer een simulatie om te laden. Je kunt frames daarna bewerken.</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Save Simulation Modal */}
+                    {showSaveModal && (
+                        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowSaveModal(false)}>
+                            <div className="bg-dark-700 rounded-xl w-full max-w-sm shadow-2xl border border-dark-500 p-5"
+                                onClick={e => e.stopPropagation()}>
+                                <h2 className="text-lg font-bold mb-1">Simulatie Opslaan</h2>
+                                <p className="text-xs text-gray-500 mb-4">{format} - {frames.length} frames worden opgeslagen</p>
+                                <input
+                                    type="text"
+                                    className="w-full px-3 py-2 rounded-lg bg-dark-800 border border-dark-500 text-white text-sm focus:outline-none focus:border-teamA transition mb-4"
+                                    placeholder="Naam van de simulatie..."
+                                    value={saveSimName}
+                                    onChange={e => setSaveSimName(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter' && saveSimName.trim()) saveSimulation(saveSimName); }}
+                                    autoFocus
+                                />
+                                <div className="flex gap-2">
+                                    <button className="flex-1 py-2 rounded-lg text-sm font-bold bg-dark-600 hover:bg-dark-500 transition"
+                                        onClick={() => setShowSaveModal(false)}>
+                                        Annuleren
+                                    </button>
+                                    <button className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${saveSimName.trim() ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-dark-800 text-gray-600 cursor-not-allowed'}`}
+                                        disabled={!saveSimName.trim()}
+                                        onClick={() => saveSimulation(saveSimName)}>
+                                        Opslaan
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Edit modal */}
+                    {editingPlayer && (
+                        <EditModal player={editingPlayer} onSave={savePlayer} onClose={() => setEditingPlayer(null)} />
+                    )}
+
+                    {/* Notification */}
+                    {notification && (
+                        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-dark-600 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-xl border border-dark-500 z-50 animate-bounce">
+                            {notification}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+    <script>
+        // Register Service Worker for PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+                .then(() => console.log('SW registered'))
+                .catch(e => console.log('SW failed:', e));
+        }
+    </script>
+</body>
+</html>
