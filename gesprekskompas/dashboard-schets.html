@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gesprekskompas — dashboardschets</title>
+<style>
+  :root {
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-a:       #2a78d6;  /* ouder A — blauw */
+    --series-b:       #1baf7a;  /* ouder B — aqua */
+    --series-g:       #eda100;  /* gezamenlijke interactie — geel */
+    --series-m:       #008300;  /* bemiddelaar — groen */
+    --seq-100: #cde2fb; --seq-200: #9ec5f4; --seq-300: #6da7ec;
+    --seq-400: #3987e5; --seq-500: #256abf; --seq-600: #184f95;
+    --status-good:    #0ca30c;
+    --status-warning: #fab219;
+    --status-serious: #ec835a;
+    --good-text:      #006300;
+    --wash-a: rgba(42,120,214,0.10);
+  }
+  :root.dark {
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --axis:           #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-a:       #3987e5;
+    --series-b:       #199e70;
+    --series-g:       #c98500;
+    --series-m:       #008300;
+    --good-text:      #0ca30c;
+    --wash-a: rgba(57,135,229,0.14);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 20px 20px 56px; }
+
+  .disclaimer {
+    display: flex; gap: 10px; align-items: center;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--status-warning);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 18px;
+    color: var(--text-secondary);
+  }
+  .disclaimer strong { color: var(--text-primary); }
+
+  header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin: 6px 0 4px; }
+  header.top h1 { font-size: 22px; margin: 0; }
+  header.top .sub { color: var(--text-muted); font-size: 13px; }
+  .theme-btn {
+    margin-left: auto;
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary);
+    border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer;
+  }
+
+  .context {
+    display: flex; flex-wrap: wrap; gap: 8px 20px;
+    color: var(--text-secondary); font-size: 13px;
+    margin: 10px 0 18px;
+  }
+  .context b { color: var(--text-primary); font-weight: 600; }
+
+  nav.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+  nav.tabs button {
+    font: inherit; font-size: 13px;
+    padding: 7px 14px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary);
+  }
+  nav.tabs button[aria-selected="true"] {
+    background: var(--text-primary); color: var(--page); border-color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  section.panel { display: none; }
+  section.panel.active { display: block; }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  .card h2 { font-size: 16px; margin: 0 0 2px; }
+  .card h3 { font-size: 13.5px; margin: 18px 0 8px; }
+  .card .lede { color: var(--text-muted); font-size: 13px; margin: 0 0 14px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 10px; font-size: 13px; color: var(--text-secondary); }
+  .legend .key { display: inline-flex; align-items: center; gap: 7px; }
+  .key i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+  .key i.dot { width: 9px; height: 9px; border-radius: 50%; }
+
+  .chart-wrap { position: relative; }
+  svg text { font-family: inherit; }
+  .tooltip {
+    position: absolute; pointer-events: none; display: none; z-index: 5;
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.14);
+    padding: 8px 11px; font-size: 12.5px; color: var(--text-secondary);
+    min-width: 130px;
+  }
+  .tooltip b { color: var(--text-primary); }
+  .tooltip .row { display: flex; align-items: center; gap: 7px; margin-top: 2px; }
+  .tooltip .row i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .tooltip .row .v { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+
+  details.tabelview { margin-top: 10px; }
+  details.tabelview summary { cursor: pointer; color: var(--text-muted); font-size: 12.5px; }
+  table.data { border-collapse: collapse; margin-top: 8px; font-size: 12.5px; width: 100%; max-width: 560px; }
+  table.data th, table.data td {
+    text-align: left; padding: 4px 10px; border-bottom: 1px solid var(--grid);
+    font-variant-numeric: tabular-nums;
+  }
+  table.data th { color: var(--text-muted); font-weight: 600; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 2px 9px;
+    border: 1px solid var(--border); color: var(--text-secondary); background: transparent;
+    white-space: nowrap;
+  }
+  .badge i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+
+  /* Stat tiles */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+  .tile { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .tile .label { font-size: 12.5px; color: var(--text-muted); }
+  .tile .value { font-size: 26px; font-weight: 600; margin: 2px 0; }
+  .tile .delta { font-size: 12.5px; color: var(--text-secondary); }
+  .tile .delta.good { color: var(--good-text); font-weight: 600; }
+  .tile svg { margin-top: 6px; display: block; }
+
+  /* Interruption matrix */
+  table.matrix { border-collapse: separate; border-spacing: 3px; font-size: 13px; }
+  table.matrix th { font-weight: 600; color: var(--text-muted); font-size: 12px; padding: 4px 8px; text-align: center; }
+  table.matrix th.rowh { text-align: right; }
+  table.matrix td {
+    width: 74px; height: 40px; text-align: center; border-radius: 6px;
+    font-variant-numeric: tabular-nums; font-weight: 600; cursor: default;
+  }
+  table.matrix td.empty { background: transparent; color: var(--text-muted); font-weight: 400; }
+
+  /* Kantelpuntkaarten */
+  .kp-card { border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; scroll-margin-top: 16px; }
+  .kp-card.flash { outline: 2px solid var(--series-a); }
+  .kp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 8px; }
+  .kp-head .num {
+    width: 26px; height: 26px; border-radius: 50%; flex: none;
+    background: var(--text-primary); color: var(--page);
+    display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;
+  }
+  .kp-head h3 { margin: 0; font-size: 15px; }
+  .kp-head .time { color: var(--text-muted); font-size: 12.5px; }
+  .fragment {
+    border-left: 3px solid var(--grid); padding: 6px 14px; margin: 10px 0;
+    color: var(--text-secondary); font-size: 13.5px;
+  }
+  .fragment .spk { font-weight: 600; color: var(--text-primary); }
+  .audio-stub {
+    display: flex; align-items: center; gap: 10px;
+    border: 1px dashed var(--axis); border-radius: 8px; padding: 8px 12px;
+    color: var(--text-muted); font-size: 12.5px; margin: 8px 0 12px; max-width: 420px;
+  }
+  .audio-stub .bar { flex: 1; height: 4px; border-radius: 2px; background: var(--grid); position: relative; }
+  .audio-stub .bar::before { content: ""; position: absolute; inset: 0 70% 0 0; border-radius: 2px; background: var(--axis); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+  .chip { font-size: 11.5px; border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; color: var(--text-secondary); }
+  .chip b { color: var(--text-primary); font-weight: 600; }
+  .kp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px 22px; margin-top: 6px; }
+  .kp-grid h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin: 12px 0 4px; }
+  .kp-grid ul { margin: 0; padding-left: 18px; color: var(--text-secondary); }
+  .kp-grid li { margin: 2px 0; }
+  .conf { display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; max-width: 340px; }
+  .conf .track { flex: 1; height: 6px; border-radius: 3px; background: var(--seq-100); overflow: hidden; }
+  .conf .fill { height: 100%; border-radius: 3px; background: var(--seq-500); }
+  .conf .pct { font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 4px 26px; }
+  .summary-grid h3 { margin: 14px 0 4px; }
+  .summary-grid ul { margin: 0 0 6px; padding-left: 18px; color: var(--text-secondary); }
+  .summary-grid li { margin: 3px 0; }
+
+  footer.foot { color: var(--text-muted); font-size: 12.5px; margin-top: 26px; }
+  footer.foot a { color: var(--text-secondary); }
+
+  @media (max-width: 640px) {
+    .wrap { padding: 14px 12px 40px; }
+    .card { padding: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="disclaimer" role="note">
+    <span aria-hidden="true">⚠️</span>
+    <span><strong>Schets met fictieve data — geen werkend analysesysteem.</strong>
+    Deze pagina illustreert hoe de analyseomgeving uit het onderzoeksvoorstel <em>Gesprekskompas</em> eruit kan zien. Alle namen, cijfers en fragmenten zijn verzonnen.</span>
+  </div>
+
+  <header class="top">
+    <h1>Gesprekskompas</h1>
+    <span class="sub">AI-ondersteunde gespreksanalyse voor ouderschapsbemiddeling — dashboardschets</span>
+    <button class="theme-btn" id="themeBtn" type="button">🌙 Donker</button>
+  </header>
+
+  <div class="context">
+    <span>Gesprek: <b>#3 van 5 — dinsdag 12 mei (fictief)</b></span>
+    <span>Duur: <b>45 min</b></span>
+    <span>Deelnemers: <b>ouder A, ouder B, bemiddelaar</b></span>
+    <span>Hoofdonderwerp: <b>wijziging vakantiedagen</b></span>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="Weergaven">
+    <button role="tab" aria-selected="true"  data-tab="tijdlijn">Spanningstijdlijn</button>
+    <button role="tab" aria-selected="false" data-tab="thema">Themakaart</button>
+    <button role="tab" aria-selected="false" data-tab="interactie">Interactiekaart</button>
+    <button role="tab" aria-selected="false" data-tab="kantelpunten">Kantelpunten</button>
+    <button role="tab" aria-selected="false" data-tab="samenvatting">Samenvatting</button>
+    <button role="tab" aria-selected="false" data-tab="verloop">Verloop over gesprekken</button>
+  </nav>
+
+  <!-- ══════════ 1. SPANNINGSTIJDLIJN ══════════ -->
+  <section class="panel active" id="panel-tijdlijn">
+    <div class="card">
+      <h2>Spanningstijdlijn</h2>
+      <p class="lede">Verloop van de interactiespanning (index 0–100, t.o.v. persoonlijke uitgangswaarde). Genummerde punten zijn kantelpunten — klik erop voor de kantelpuntkaart. De waarden zijn hypotheses op basis van taal-, stem- en interactiesignalen, geen emotiemeting.</p>
+      <div class="legend" id="legendTijdlijn"></div>
+      <div class="chart-wrap" id="tensionChart"></div>
+      <details class="tabelview">
+        <summary>Toon als tabel</summary>
+        <table class="data" id="tensionTable"></table>
+      </details>
+    </div>
+  </section>
+
+  <!-- ══════════ 2. THEMAKAART ══════════ -->
+  <section class="panel" id="panel-thema">
+    <div class="card">
+      <h2>Themakaart</h2>
+      <p class="lede">Bestede tijd per gespreksthema, met de gemiddelde interactiespanning tijdens dat thema en de uitkomststatus.</p>
+      <div class="chart-wrap" id="themeChart"></div>
+      <details class="tabelview">
+        <summary>Toon als tabel</summary>
+        <table class="data" id="themeTable"></table>
+      </details>
+    </div>
+  </section>
+
+  <!-- ══════════ 3. INTERACTIEKAART ══════════ -->
+  <section class="panel" id="panel-interactie">
+    <div class="grid2">
+      <div class="card">
+        <h2>Spreektijdverdeling</h2>
+        <p class="lede">Aandeel van de totale spreektijd per deelnemer.</p>
+        <div class="legend" id="legendSpreektijd"></div>
+        <div class="chart-wrap" id="talkChart"></div>
+        <h3>Communicatierichting</h3>
+        <p class="lede">Spreken ouders elkaar rechtstreeks aan, of loopt het gesprek via de bemiddelaar?</p>
+        <div class="chart-wrap" id="dirChart"></div>
+      </div>
+      <div class="card">
+        <h2>Onderbrekingen</h2>
+        <p class="lede">Wie onderbreekt wie (aantal keer). Donkerder = vaker.</p>
+        <div class="chart-wrap" id="matrixWrap"></div>
+        <h3>Overige interactiesignalen</h3>
+        <div class="tiles">
+          <div class="tile">
+            <div class="label">Momenten van wederzijdse erkenning</div>
+            <div class="value">3</div>
+            <div class="delta">waarvan 1 mogelijk gemist (zie kantelpunt 3)</div>
+          </div>
+          <div class="tile">
+            <div class="label">Vragen zonder antwoord</div>
+            <div class="value">5</div>
+            <div class="delta">4 van ouder A aan ouder B</div>
+          </div>
+          <div class="tile">
+            <div class="label">Kindperspectief benoemd</div>
+            <div class="value">4×</div>
+            <div class="delta">3× door bemiddelaar, 1× door ouder B</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 4. KANTELPUNTEN ══════════ -->
+  <section class="panel" id="panel-kantelpunten">
+    <div class="card">
+      <h2>Kantelpuntkaarten</h2>
+      <p class="lede">Per belangrijk moment: het fragment, de gemeten signalen, de AI-hypothese mét betrouwbaarheid en alternatieve verklaringen, de interventie en het verloop daarna. De bemiddelaar kan iedere analyse accepteren, corrigeren of verwijderen.</p>
+      <div id="kpContainer"></div>
+    </div>
+  </section>
+
+  <!-- ══════════ 5. SAMENVATTING ══════════ -->
+  <section class="panel" id="panel-samenvatting">
+    <div class="card">
+      <h2>Gesprekssamenvatting</h2>
+      <p class="lede">Automatisch gegenereerd, controleerbaar gekoppeld aan het transcript (ieder punt verwijst naar een tijdstip). Concept — nog niet door de bemiddelaar geaccordeerd.</p>
+      <div class="summary-grid">
+        <div>
+          <h3>Besproken onderwerpen</h3>
+          <ul>
+            <li>Schoolkeuze na de zomer (min 4–11)</li>
+            <li>Overdrachtsmomenten op wisseldagen (min 12–24)</li>
+            <li>Wijziging vakantiedagen (min 29–41)</li>
+            <li>Vervolgafspraken (min 41–45)</li>
+          </ul>
+          <h3>Belangen en zorgen per ouder</h3>
+          <ul>
+            <li><b>Ouder A:</b> voorspelbaarheid van de planning; op tijd kunnen schakelen met werk.</li>
+            <li><b>Ouder B:</b> gelijkwaardige verdeling van vakantieweken; erkenning van flexibiliteit tot nu toe.</li>
+          </ul>
+          <h3>Overeenkomsten</h3>
+          <ul>
+            <li>Beide ouders willen de zomerplanning vóór 1 juni rond hebben.</li>
+            <li>Beide ouders vinden rust rond de overdracht belangrijk voor de kinderen.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Gemaakte afspraken</h3>
+          <ul>
+            <li>Proefregeling zomervakantie: week-om-week, evaluatie in gesprek 4 (min 42).</li>
+            <li>Overdracht voortaan op school in plaats van bij de voordeur (min 23).</li>
+          </ul>
+          <h3>Openstaande geschilpunten</h3>
+          <ul>
+            <li>Verdeling van de meivakantie volgend jaar.</li>
+            <li>Communicatie over last-minute wijzigingen (keert terug zonder besluit).</li>
+          </ul>
+          <h3>Aandachtspunten voor gesprek 4</h3>
+          <ul>
+            <li>Erkenningsmoment van ouder B (min 26) is mogelijk onbeantwoord gebleven.</li>
+            <li>Thema "communicatie" kwam driemaal terug zonder besluit — agenderen.</li>
+            <li>Kindperspectief kwam vooral via de bemiddelaar in het gesprek.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 6. VERLOOP OVER GESPREKKEN ══════════ -->
+  <section class="panel" id="panel-verloop">
+    <div class="card">
+      <h2>Verloop over vijf gesprekken</h2>
+      <p class="lede">Longitudinaal beeld van dezelfde ouders (fictief). Verandering is weergegeven t.o.v. gesprek 1; de sparkline toont alle vijf gesprekken.</p>
+      <div class="tiles" id="longTiles"></div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    Onderdeel van het onderzoeksvoorstel <a href="onderzoeksvoorstel.md">Gesprekskompas</a> · zie ook het <a href="projectplan.md">compacte projectplan</a>.
+    Alle gegevens op deze pagina zijn fictief en dienen alleen ter illustratie van de beoogde weergaven (spanningstijdlijn, themakaart, interactiekaart, kantelpuntkaarten, samenvatting en longitudinaal overzicht).
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ───────── thema (licht/donker) ───────── */
+const rootEl = document.documentElement;
+const themeBtn = document.getElementById("themeBtn");
+function applyTheme(dark) {
+  rootEl.classList.toggle("dark", dark);
+  themeBtn.textContent = dark ? "☀️ Licht" : "🌙 Donker";
+  drawAll();
+}
+themeBtn.addEventListener("click", () => applyTheme(!rootEl.classList.contains("dark")));
+
+/* ───────── tabs ───────── */
+const tabs = document.querySelectorAll("nav.tabs button");
+function showTab(name) {
+  tabs.forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
+  document.querySelectorAll("section.panel").forEach(p =>
+    p.classList.toggle("active", p.id === "panel-" + name));
+}
+tabs.forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+/* ───────── helpers ───────── */
+function cssVar(name) { return getComputedStyle(rootEl).getPropertyValue(name).trim(); }
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+/* horizontale balk: 4px afgeronde data-kant, recht aan de basislijn */
+function barPathH(x, y, w, h, r) {
+  r = Math.min(r, w, h / 2);
+  return `M${x},${y} h${w - r} a${r},${r} 0 0 1 ${r},${r} v${h - 2 * r} a${r},${r} 0 0 1 ${-r},${r} h${-(w - r)} z`;
+}
+
+/* ───────── fictieve data ───────── */
+const T = {
+  A: [30,28,27,28,26,27,28,29,30,31,30,32,35,37,40,44,50,60,66,58,49,45,42,40,41,43,45,48,50,54,60,70,78,83,80,66,52,45,41,38,35,31,28,25,22,20],
+  B: [26,25,24,25,27,29,31,33,32,35,38,37,41,45,49,54,62,70,75,68,58,52,49,47,45,49,58,63,60,66,73,82,88,90,87,76,64,57,53,50,47,44,42,40,39,38]
+};
+T.G = T.A.map((v, i) => Math.round((v + T.B[i]) / 2));
+
+const EVENTS = [
+  { t: 4,  type: "onderwerp",   label: "Nieuw onderwerp: schoolkeuze" },
+  { t: 12, type: "onderwerp",   label: "Nieuw onderwerp: overdrachtsmomenten" },
+  { t: 17, type: "kantelpunt",  card: 1, label: "Kantelpunt 1 — correctie & stemverheffing" },
+  { t: 19, type: "interventie", label: "Interventie: vertragen + beide ouders laten samenvatten" },
+  { t: 26, type: "kantelpunt",  card: 3, label: "Kantelpunt 3 — mogelijke gemiste toenadering" },
+  { t: 29, type: "onderwerp",   label: "Nieuw onderwerp: wijziging vakantiedagen" },
+  { t: 31, type: "kantelpunt",  card: 2, label: "Kantelpunt 2 — escalatie vakantiedagen" },
+  { t: 35, type: "interventie", label: "Interventie: samenvatting + vraag naar onderliggende zorg" },
+  { t: 38, type: "herstel",     label: "Herstelbeweging: beide ouders formuleren een belang" },
+  { t: 42, type: "afspraak",    label: "Afspraak: proefregeling zomervakantie" }
+];
+
+const THEMES = [
+  { name: "Wijziging vakantiedagen",  min: 14, sp: 78, status: "deels"  },
+  { name: "Overdrachtsmomenten",      min: 9,  sp: 65, status: "terug"  },
+  { name: "Schoolkeuze",              min: 7,  sp: 42, status: "constr" },
+  { name: "Communicatie onderling",   min: 6,  sp: 55, status: "terug"  },
+  { name: "Perspectief van het kind", min: 5,  sp: 30, status: "constr" },
+  { name: "Opening en afronding",     min: 4,  sp: 18, status: "geen"   }
+];
+const STATUS = {
+  constr: { txt: "constructief besproken",       icon: "✓", var: "--status-good"    },
+  terug:  { txt: "terugkerend zonder besluit",   icon: "↻", var: "--status-warning" },
+  deels:  { txt: "deels besloten (proefregeling)", icon: "◐", var: "--status-serious" },
+  geen:   { txt: "procesmatig",                  icon: "·", var: "--text-muted"     }
+};
+
+const TALK = [
+  { who: "Ouder A",     pct: 38, v: "--series-a" },
+  { who: "Ouder B",     pct: 34, v: "--series-b" },
+  { who: "Bemiddelaar", pct: 28, v: "--series-m" }
+];
+const DIRECT = [
+  { who: "Via de bemiddelaar", pct: 65 },
+  { who: "Rechtstreeks tussen ouders", pct: 35 }
+];
+const MATRIX = {
+  rows: ["Ouder A", "Ouder B", "Bemiddelaar"],
+  cols: ["Ouder A", "Ouder B", "Bemiddelaar"],
+  data: [[null, 7, 2], [4, null, 1], [1, 0, null]]
+};
+
+const LONG = [
+  { label: "Onderbrekingen per gesprek", vals: [21, 18, 14, 15, 11], goodDown: true,  unit: "" },
+  { label: "Gem. hersteltijd na spanningspiek", vals: [6.5, 5.8, 4.9, 5.2, 3.8], goodDown: true, unit: " min" },
+  { label: "Kindperspectief-momenten", vals: [2, 3, 5, 4, 7], goodDown: false, unit: "" },
+  { label: "Toekomstgerichte uitspraken", vals: [12, 15, 19, 18, 24], goodDown: false, unit: "%" }
+];
+
+const KANTELPUNTEN = [
+  {
+    n: 1, tijd: "min 17–19", thema: "Overdrachtsmomenten",
+    titel: "Correctie gevolgd door stemverheffing",
+    fragment: [
+      ["Ouder A", "Nee, dat klopt niet, de wissel was om vijf uur, niet om half zes."],
+      ["Ouder B", "Zie je, dít bedoel ik nou — het is nooit eens goed…"],
+      ["Bemiddelaar", "Ik wil hier even vertragen. Mag ik jullie allebei vragen kort samen te vatten wat de ander net zei?"]
+    ],
+    signalen: ["taal: correctie + generalisatie (“nooit”)", "stem: volume ouder B +9 dB t.o.v. uitgangswaarde", "interactie: 2 onderbrekingen binnen 40 sec"],
+    metingen: ["Spreektempo ouder B: +22%", "Overlap in spreekbeurten: 3× ", "Reactievertraging ouder A: neemt af tot < 0,3 s"],
+    hypothese: "De feitelijke correctie lijkt door ouder B te worden gehoord als kritiek op diens betrouwbaarheid; de spanning stijgt bij beide ouders.",
+    betrouwbaarheid: 62,
+    alternatieven: ["Ouder B reageert mogelijk op een eerder, nog onbesproken voorval.", "Verhoogd volume past deels bij de spreekstijl van ouder B in eerdere gesprekken."],
+    interventie: "Vertragen en beide ouders afzonderlijk laten samenvatten (min 19).",
+    verloop: "Tijdelijke spanningsafname (index −16 in 3 min); het onderwerp keert in min 22 terug maar zonder stemverheffing.",
+    alternatieveInterventies: ["Eerst de onderliggende zorg van ouder B benoemen en erkennen.", "Het concrete verzoek scheiden van de betekenis die eraan wordt gegeven."],
+    reflectie: ["Welke onderliggende zorg van ouder B is hier nog niet erkend?", "Wat maakte dat de samenvatting hier wél vertraagde?"]
+  },
+  {
+    n: 2, tijd: "min 31–36", thema: "Wijziging vakantiedagen",
+    titel: "Hoogste gezamenlijke spanning van het gesprek",
+    fragment: [
+      ["Ouder A", "Als jij die week pakt, kan ik mijn dienst niet meer ruilen. Dat weet je."],
+      ["Ouder B", "Vorig jaar heb ík alles opgevangen, en nu doe je weer alsof—"],
+      ["Ouder A", "(onderbreekt) Dat is niet waar."],
+      ["Bemiddelaar", "Ik vat even samen wat ik jullie allebei hoor zeggen… Wat maakt deze week voor ieder van jullie zo belangrijk?"]
+    ],
+    signalen: ["taal: 2 generalisaties over het verleden (ouder B)", "stem: spreektempo beide ouders +25–30%", "interactie: ouder A onderbreekt ouder B 4×"],
+    metingen: ["Gezamenlijke spanningsindex piekt op 87", "Spreektijd­verhouding in dit blok: 58/42", "Na interventie: tempo −18% binnen 2 min"],
+    hypothese: "Het onderwerp raakt bij ouder A aan voorspelbaarheid (werk) en bij ouder B aan gelijkwaardigheid en erkenning van eerdere flexibiliteit.",
+    betrouwbaarheid: 81,
+    alternatieven: ["De piek kan mede samenhangen met tijdsdruk: het gesprek naderde het einde.", "Betrokkenheid bij het onderwerp kan het hoge tempo deels verklaren."],
+    interventie: "Samenvatting van beide perspectieven + vraag naar de onderliggende zorg (min 35).",
+    verloop: "Directe spanningsafname; beide ouders formuleren in min 38 een concreet belang; in min 42 volgt een proefafspraak.",
+    alternatieveInterventies: ["Eerder begrenzen van de onderbrekingen (beurtstructuur).", "Kindperspectief activeren: wat merken de kinderen van de vakantieplanning?"],
+    reflectie: ["Had eerder structureren de piek verlaagd, of was deze confrontatie juist nodig?", "Hoe kan de erkenningsbehoefte van ouder B in gesprek 4 expliciet ruimte krijgen?"]
+  },
+  {
+    n: 3, tijd: "min 26–27", thema: "Overdrachtsmomenten",
+    titel: "Mogelijke gemiste toenadering",
+    fragment: [
+      ["Ouder B", "De ochtenden deed je trouwens altijd goed met de meiden, dat wil ik wel gezegd hebben."],
+      ["Ouder A", "Hm. Maar goed, over dat rooster: ik stel voor dat we…"]
+    ],
+    signalen: ["taal: erkenning/waardering door ouder B", "interactie: geen respons op de erkenning", "stem: toonhoogte ouder B daalt (ontspanning)"],
+    metingen: ["Reactievertraging ouder A: 1,8 s", "Onderwerpwissel binnen één spreekbeurt", "Spanningsindex ouder B stijgt licht ná de gemiste respons (+6)"],
+    hypothese: "Ouder B doet een toenaderingspoging die door ouder A niet wordt opgemerkt of beantwoord; dit kan bijdragen aan de latere escalatie bij het vakantie-onderwerp.",
+    betrouwbaarheid: 48,
+    alternatieven: ["Ouder A kan de opmerking wel hebben gehoord maar bewust bij het rooster willen blijven.", "De lichte spanningsstijging bij ouder B kan ook bij het nieuwe onderwerp horen."],
+    interventie: "Geen — het moment passeerde zonder markering.",
+    verloop: "Het gesprek ging verder over het rooster; de waardering is niet herhaald.",
+    alternatieveInterventies: ["De erkenning hardop markeren: “Ik hoor dat u iets positiefs zegt over…”", "Terugkomen op het moment bij de afronding of in gesprek 4."],
+    reflectie: ["Herkent u dit moment terug uit het gesprek?", "Wat helpt u om toenaderingspogingen tijdens het gesprek sneller op te merken?"]
+  }
+];
+
+/* ───────── tooltip infra ───────── */
+function makeTooltip(wrap) {
+  const tip = document.createElement("div");
+  tip.className = "tooltip";
+  wrap.appendChild(tip);
+  return tip;
+}
+function placeTip(tip, wrap, x, y) {
+  const r = wrap.getBoundingClientRect();
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  let left = x + 14, top = y - th - 10;
+  if (left + tw > r.width) left = x - tw - 14;
+  if (top < 0) top = y + 14;
+  tip.style.left = left + "px";
+  tip.style.top = top + "px";
+}
+
+/* ───────── 1. spanningstijdlijn ───────── */
+function drawTension() {
+  const wrap = document.getElementById("tensionChart");
+  wrap.innerHTML = "";
+  const W = Math.max(560, Math.min(1040, wrap.clientWidth || 1000)), H = 340;
+  const m = { l: 40, r: 118, t: 34, b: 34 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const X = t => m.l + (t / 45) * iw;
+  const Y = v => m.t + (1 - v / 100) * ih;
+
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img",
+    "aria-label": "Lijngrafiek van de interactiespanning per minuut voor ouder A, ouder B en de gezamenlijke interactie" }, wrap);
+
+  for (let v = 0; v <= 100; v += 25) {
+    el("line", { x1: m.l, x2: m.l + iw, y1: Y(v), y2: Y(v), stroke: cssVar("--grid"), "stroke-width": 1 }, svg);
+    el("text", { x: m.l - 8, y: Y(v) + 4, "text-anchor": "end", "font-size": 11,
+      fill: cssVar("--text-muted"), style: "font-variant-numeric:tabular-nums" }, svg).textContent = v;
+  }
+  el("line", { x1: m.l, x2: m.l + iw, y1: Y(0), y2: Y(0), stroke: cssVar("--axis"), "stroke-width": 1 }, svg);
+  for (let t = 0; t <= 45; t += 5) {
+    el("text", { x: X(t), y: H - 12, "text-anchor": "middle", "font-size": 11,
+      fill: cssVar("--text-muted"), style: "font-variant-numeric:tabular-nums" }, svg).textContent = t;
+  }
+  el("text", { x: m.l + iw / 2, y: H - 0.5, "text-anchor": "middle", "font-size": 11, fill: cssVar("--text-muted") }, svg)
+    .textContent = "minuten";
+
+  const series = [
+    { key: "A", name: "Ouder A", short: "Ouder A", color: cssVar("--series-a") },
+    { key: "B", name: "Ouder B", short: "Ouder B", color: cssVar("--series-b") },
+    { key: "G", name: "Gezamenlijke interactie", short: "Gezamenlijk", color: cssVar("--series-g") }
+  ];
+
+  /* lichte wash onder de gezamenlijke lijn */
+  const gPts = T.G.map((v, i) => `${X(i)},${Y(v)}`).join(" ");
+  el("polygon", { points: `${X(0)},${Y(0)} ${gPts} ${X(45)},${Y(0)}`, fill: cssVar("--series-g"), opacity: 0.08 }, svg);
+
+  series.forEach(s => {
+    const pts = T[s.key].map((v, i) => `${X(i)},${Y(v)}`).join(" ");
+    el("polyline", { points: pts, fill: "none", stroke: s.color, "stroke-width": 2,
+      "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+    const last = T[s.key][45];
+    el("circle", { cx: X(45), cy: Y(last), r: 4, fill: s.color,
+      stroke: cssVar("--surface-1"), "stroke-width": 2 }, svg);
+    /* direct eindlabel (relief voor gele/aqua reeks) */
+    el("text", { x: X(45) + 9, y: Y(last) + 4, "font-size": 11.5, fill: cssVar("--text-secondary") }, svg)
+      .textContent = s.short;
+  });
+
+  /* events */
+  EVENTS.forEach(ev => {
+    const x = X(ev.t);
+    el("line", { x1: x, x2: x, y1: m.t - 4, y2: Y(0), stroke: cssVar("--axis"),
+      "stroke-width": 1, "stroke-dasharray": ev.type === "kantelpunt" ? "none" : "none", opacity: 0.55 }, svg);
+    if (ev.type === "kantelpunt") {
+      const g = el("g", { cursor: "pointer", role: "button", tabindex: 0, "aria-label": ev.label }, svg);
+      el("circle", { cx: x, cy: m.t - 12, r: 9, fill: cssVar("--text-primary"),
+        stroke: cssVar("--surface-1"), "stroke-width": 2 }, g);
+      el("text", { x: x, y: m.t - 8, "text-anchor": "middle", "font-size": 10.5,
+        "font-weight": 700, fill: cssVar("--page") }, g).textContent = ev.card;
+      const open = () => { showTab("kantelpunten"); flashCard(ev.card); };
+      g.addEventListener("click", open);
+      g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+    } else {
+      const sym = { onderwerp: "▤", interventie: "◆", herstel: "●", afspraak: "✓" }[ev.type];
+      el("text", { x: x, y: m.t - 6, "text-anchor": "middle", "font-size": 10, fill: cssVar("--text-muted") }, svg)
+        .textContent = sym;
+    }
+  });
+
+  /* crosshair + tooltip */
+  const tip = makeTooltip(wrap);
+  const cross = el("line", { x1: 0, x2: 0, y1: m.t, y2: Y(0), stroke: cssVar("--axis"),
+    "stroke-width": 1, visibility: "hidden" }, svg);
+  const hoverDots = series.map(s => el("circle", { r: 4.5, fill: s.color,
+    stroke: cssVar("--surface-1"), "stroke-width": 2, visibility: "hidden" }, svg));
+
+  svg.addEventListener("mousemove", e => {
+    const r = svg.getBoundingClientRect();
+    const sx = (e.clientX - r.left) * (W / r.width);
+    const t = Math.max(0, Math.min(45, Math.round(((sx - m.l) / iw) * 45)));
+    if (sx < m.l - 10 || sx > m.l + iw + 10) return;
+    cross.setAttribute("x1", X(t)); cross.setAttribute("x2", X(t));
+    cross.setAttribute("visibility", "visible");
+    series.forEach((s, i) => {
+      hoverDots[i].setAttribute("cx", X(t));
+      hoverDots[i].setAttribute("cy", Y(T[s.key][t]));
+      hoverDots[i].setAttribute("visibility", "visible");
+    });
+    const ev = EVENTS.find(v => v.t === t);
+    tip.innerHTML = `<b>Minuut ${t}</b>` +
+      series.map(s => `<div class="row"><i style="background:${s.color}"></i>${s.name}<span class="v">${T[s.key][t]}</span></div>`).join("") +
+      (ev ? `<div class="row" style="margin-top:5px">${ev.label}</div>` : "");
+    tip.style.display = "block";
+    const wr = wrap.getBoundingClientRect();
+    placeTip(tip, wrap, e.clientX - wr.left, e.clientY - wr.top);
+  });
+  svg.addEventListener("mouseleave", () => {
+    tip.style.display = "none";
+    cross.setAttribute("visibility", "hidden");
+    hoverDots.forEach(d => d.setAttribute("visibility", "hidden"));
+  });
+
+  /* legenda */
+  document.getElementById("legendTijdlijn").innerHTML =
+    series.map(s => `<span class="key"><i style="background:${s.color}"></i>${s.name}</span>`).join("") +
+    `<span class="key" style="color:var(--text-muted)">▤ onderwerp · ◆ interventie · ● herstel · ✓ afspraak · ⓿ kantelpunt (klikbaar)</span>`;
+
+  /* tabelweergave (per 5 min) */
+  const tbl = document.getElementById("tensionTable");
+  tbl.innerHTML = "<tr><th>Minuut</th><th>Ouder A</th><th>Ouder B</th><th>Gezamenlijk</th></tr>" +
+    Array.from({ length: 10 }, (_, i) => i * 5).map(t =>
+      `<tr><td>${t}</td><td>${T.A[t]}</td><td>${T.B[t]}</td><td>${T.G[t]}</td></tr>`).join("");
+}
+
+/* ───────── 2. themakaart ───────── */
+function drawThemes() {
+  const wrap = document.getElementById("themeChart");
+  wrap.innerHTML = "";
+  const W = Math.max(560, Math.min(1040, wrap.clientWidth || 1000));
+  const rowH = 56, m = { l: 190, r: 250, t: 26 };
+  const H = m.t + THEMES.length * rowH + 26;
+  const iw = W - m.l - m.r;
+  const maxMin = 15;
+  const mx = m.l + iw + 60, mw = 100; /* spanningsmeter-kolom */
+
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img",
+    "aria-label": "Staafdiagram: bestede minuten per gespreksthema met gemiddelde spanning" }, wrap);
+
+  el("text", { x: mx, y: 14, "font-size": 11, fill: cssVar("--text-muted") }, svg)
+    .textContent = "gem. spanning (0–100)";
+
+  [0, 5, 10, 15].forEach(v => {
+    const x = m.l + (v / maxMin) * iw;
+    el("line", { x1: x, x2: x, y1: m.t, y2: m.t + THEMES.length * rowH, stroke: cssVar("--grid"), "stroke-width": 1 }, svg);
+    el("text", { x: x, y: H - 8, "text-anchor": "middle", "font-size": 11, fill: cssVar("--text-muted") }, svg)
+      .textContent = v + (v === 15 ? " min" : "");
+  });
+
+  const tip = makeTooltip(wrap);
+  THEMES.forEach((th, i) => {
+    const y = m.t + i * rowH + 8, h = 22;
+    const w = (th.min / maxMin) * iw;
+    const st = STATUS[th.status];
+    el("text", { x: m.l - 12, y: y + h / 2 + 4, "text-anchor": "end", "font-size": 12.5,
+      fill: cssVar("--text-primary") }, svg).textContent = th.name;
+    const bar = el("path", { d: barPathH(m.l, y, w, h, 4), fill: cssVar("--seq-400") }, svg);
+    el("text", { x: m.l + w + 8, y: y + h / 2 + 4, "font-size": 12, fill: cssVar("--text-secondary"),
+      style: "font-variant-numeric:tabular-nums" }, svg).textContent = th.min + " min";
+
+    /* status per rij: icoon + label onder de balk */
+    el("circle", { cx: m.l + 4, cy: y + h + 12, r: 4, fill: cssVar(st.var) }, svg);
+    el("text", { x: m.l + 12, y: y + h + 16, "font-size": 10.5, fill: cssVar("--text-muted") }, svg)
+      .textContent = st.icon + " " + st.txt;
+
+    /* spanningsmeter (sequentieel, zelfde blauwe ramp) */
+    el("rect", { x: mx, y: y + h / 2 - 3, width: mw, height: 6, rx: 3, fill: cssVar("--seq-100") }, svg);
+    el("rect", { x: mx, y: y + h / 2 - 3, width: mw * th.sp / 100, height: 6, rx: 3, fill: cssVar("--seq-600") }, svg);
+    el("text", { x: mx + mw + 8, y: y + h / 2 + 4, "font-size": 12, fill: cssVar("--text-secondary"),
+      style: "font-variant-numeric:tabular-nums" }, svg).textContent = th.sp;
+
+    bar.addEventListener("mousemove", e => {
+      const st = STATUS[th.status];
+      tip.innerHTML = `<b>${th.name}</b><div class="row">Tijd<span class="v">${th.min} min</span></div>` +
+        `<div class="row">Gem. spanning<span class="v">${th.sp}</span></div>` +
+        `<div class="row">${st.icon} ${st.txt}</div>`;
+      tip.style.display = "block";
+      const wr = wrap.getBoundingClientRect();
+      placeTip(tip, wrap, e.clientX - wr.left, e.clientY - wr.top);
+    });
+    bar.addEventListener("mouseleave", () => tip.style.display = "none");
+  });
+
+  const tbl = document.getElementById("themeTable");
+  tbl.innerHTML = "<tr><th>Thema</th><th>Minuten</th><th>Gem. spanning</th><th>Status</th></tr>" +
+    THEMES.map(t => `<tr><td>${t.name}</td><td>${t.min}</td><td>${t.sp}</td><td>${STATUS[t.status].icon} ${STATUS[t.status].txt}</td></tr>`).join("");
+}
+
+/* ───────── 3. interactiekaart ───────── */
+function drawTalk() {
+  const wrap = document.getElementById("talkChart");
+  wrap.innerHTML = "";
+  const W = Math.max(280, wrap.clientWidth || 420), H = 66;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img",
+    "aria-label": "Spreektijdverdeling: ouder A 38 procent, ouder B 34 procent, bemiddelaar 28 procent" }, wrap);
+  let x = 0;
+  const tip = makeTooltip(wrap);
+  TALK.forEach((t, i) => {
+    const w = (t.pct / 100) * W - (i < TALK.length - 1 ? 2 : 0); /* 2px surface gap */
+    const seg = el("rect", { x, y: 14, width: w, height: 22, rx: i === 0 || i === TALK.length - 1 ? 4 : 0,
+      fill: cssVar(t.v) }, svg);
+    /* percentage in het segment als het past, anders erbuiten via legenda */
+    if (w > 46) {
+      el("text", { x: x + w / 2, y: 29, "text-anchor": "middle", "font-size": 12, "font-weight": 600,
+        fill: "#ffffff" }, svg).textContent = t.pct + "%";
+    }
+    seg.addEventListener("mousemove", e => {
+      tip.innerHTML = `<b>${t.who}</b><div class="row">Spreektijd<span class="v">${t.pct}%</span></div>`;
+      tip.style.display = "block";
+      const wr = wrap.getBoundingClientRect();
+      placeTip(tip, wrap, e.clientX - wr.left, e.clientY - wr.top);
+    });
+    seg.addEventListener("mouseleave", () => tip.style.display = "none");
+    x += w + 2;
+  });
+  document.getElementById("legendSpreektijd").innerHTML =
+    TALK.map(t => `<span class="key"><i class="dot" style="background:${cssVar(t.v)}"></i>${t.who} — ${t.pct}%</span>`).join("");
+}
+
+function drawDirection() {
+  const wrap = document.getElementById("dirChart");
+  wrap.innerHTML = "";
+  const W = Math.max(280, wrap.clientWidth || 420);
+  const rowH = 40, m = { l: 0, r: 60 };
+  const H = DIRECT.length * rowH;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img",
+    "aria-label": "Communicatierichting: 65 procent via de bemiddelaar, 35 procent rechtstreeks" }, wrap);
+  DIRECT.forEach((d, i) => {
+    const y = i * rowH + 4, h = 18;
+    const w = (d.pct / 100) * (W - m.r);
+    el("path", { d: barPathH(0, y, w, h, 4), fill: cssVar("--seq-400") }, svg);
+    el("text", { x: w + 8, y: y + h / 2 + 4, "font-size": 12, fill: cssVar("--text-secondary"),
+      style: "font-variant-numeric:tabular-nums" }, svg).textContent = d.pct + "%";
+    el("text", { x: 0, y: y + h + 14, "font-size": 12, fill: cssVar("--text-muted") }, svg).textContent = d.who;
+  });
+}
+
+function drawMatrix() {
+  const wrap = document.getElementById("matrixWrap");
+  wrap.innerHTML = "";
+  const tbl = document.createElement("table");
+  tbl.className = "matrix";
+  const seq = ["--seq-100", "--seq-200", "--seq-300", "--seq-400", "--seq-500", "--seq-600"];
+  const maxV = 7;
+  let html = "<tr><th></th>" + MATRIX.cols.map(c => `<th scope="col">→ ${c}</th>`).join("") + "</tr>";
+  MATRIX.rows.forEach((r, i) => {
+    html += `<tr><th scope="row" class="rowh">${r}</th>`;
+    MATRIX.cols.forEach((c, j) => {
+      const v = MATRIX.data[i][j];
+      if (v === null) { html += `<td class="empty">—</td>`; return; }
+      const step = v === 0 ? null : seq[Math.min(seq.length - 1, Math.floor((v / maxV) * (seq.length - 1)))];
+      const bg = step ? `background:${cssVar(step)};` : "background:transparent;border:1px solid var(--grid);";
+      const dark = step && seq.indexOf(step) >= 3;
+      html += `<td style="${bg}color:${dark ? "#fff" : "var(--text-primary)"}" title="${r} onderbreekt ${c}: ${v}×">${v}</td>`;
+    });
+    html += "</tr>";
+  });
+  tbl.innerHTML = html;
+  wrap.appendChild(tbl);
+  const note = document.createElement("p");
+  note.className = "lede";
+  note.style.marginTop = "8px";
+  note.textContent = "Rijen = wie onderbreekt, kolommen = wie onderbroken wordt. Ouder A onderbreekt ouder B het vaakst (7×), grotendeels in min 31–36.";
+  wrap.appendChild(note);
+}
+
+/* ───────── 4. kantelpuntkaarten ───────── */
+function renderKantelpunten() {
+  const c = document.getElementById("kpContainer");
+  c.innerHTML = KANTELPUNTEN.map(k => `
+    <article class="kp-card" id="kp-${k.n}">
+      <div class="kp-head">
+        <span class="num">${k.n}</span>
+        <h3>${k.titel}</h3>
+        <span class="time">${k.tijd} · thema: ${k.thema}</span>
+      </div>
+      <div class="fragment">${k.fragment.map(f => `<div><span class="spk">${f[0]}:</span> ${f[1]}</div>`).join("")}</div>
+      <div class="audio-stub"><span aria-hidden="true">▶</span><span class="bar"></span><span>audio van het fragment (fictief — niet afspeelbaar)</span></div>
+      <div class="chips">${k.signalen.map(s => `<span class="chip">${s}</span>`).join("")}</div>
+      <div class="kp-grid">
+        <div>
+          <h4>Gemeten veranderingen</h4>
+          <ul>${k.metingen.map(x => `<li>${x}</li>`).join("")}</ul>
+          <h4>AI-hypothese</h4>
+          <p style="margin:2px 0;color:var(--text-secondary)">${k.hypothese}</p>
+          <div class="conf">
+            <span class="pct">betrouwbaarheid</span>
+            <span class="track"><span class="fill" style="width:${k.betrouwbaarheid}%"></span></span>
+            <span class="pct">${k.betrouwbaarheid}%</span>
+          </div>
+          <h4>Alternatieve verklaringen</h4>
+          <ul>${k.alternatieven.map(x => `<li>${x}</li>`).join("")}</ul>
+        </div>
+        <div>
+          <h4>Interventie van de bemiddelaar</h4>
+          <p style="margin:2px 0;color:var(--text-secondary)">${k.interventie}</p>
+          <h4>Verloop daarna</h4>
+          <p style="margin:2px 0;color:var(--text-secondary)">${k.verloop}</p>
+          <h4>Mogelijke alternatieve interventies</h4>
+          <ul>${k.alternatieveInterventies.map(x => `<li>${x}</li>`).join("")}</ul>
+          <h4>Reflectievragen</h4>
+          <ul>${k.reflectie.map(x => `<li>${x}</li>`).join("")}</ul>
+        </div>
+      </div>
+    </article>`).join("");
+}
+function flashCard(n) {
+  const card = document.getElementById("kp-" + n);
+  if (!card) return;
+  card.scrollIntoView({ behavior: "smooth", block: "start" });
+  card.classList.add("flash");
+  setTimeout(() => card.classList.remove("flash"), 1800);
+}
+
+/* ───────── 6. longitudinaal ───────── */
+function drawLong() {
+  const c = document.getElementById("longTiles");
+  c.innerHTML = "";
+  LONG.forEach(mtr => {
+    const first = mtr.vals[0], last = mtr.vals[mtr.vals.length - 1];
+    const diff = last - first;
+    const good = mtr.goodDown ? diff < 0 : diff > 0;
+    const sign = diff > 0 ? "+" : "−";
+    const tile = document.createElement("div");
+    tile.className = "tile";
+    tile.innerHTML = `<div class="label">${mtr.label}</div>
+      <div class="value">${String(last).replace(".", ",")}${mtr.unit}</div>
+      <div class="delta ${good ? "good" : ""}">${sign}${String(Math.abs(diff)).replace(".", ",").replace(/^(\d+),?0?$/, "$1")}${mtr.unit} t.o.v. gesprek 1 ${good ? "· gunstig" : ""}</div>`;
+    /* sparkline over 5 gesprekken */
+    const W = 170, H = 36, pad = 5;
+    const min = Math.min(...mtr.vals), max = Math.max(...mtr.vals);
+    const X = i => pad + (i / (mtr.vals.length - 1)) * (W - 2 * pad);
+    const Y = v => pad + (1 - (v - min) / (max - min || 1)) * (H - 2 * pad);
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img",
+      "aria-label": `${mtr.label} over vijf gesprekken: ${mtr.vals.join(", ")}` });
+    el("polyline", { points: mtr.vals.map((v, i) => `${X(i)},${Y(v)}`).join(" "),
+      fill: "none", stroke: cssVar("--axis"), "stroke-width": 2,
+      "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+    el("circle", { cx: X(mtr.vals.length - 1), cy: Y(last), r: 4,
+      fill: cssVar("--seq-500"), stroke: cssVar("--surface-1"), "stroke-width": 2 }, svg);
+    tile.appendChild(svg);
+    const cap = document.createElement("div");
+    cap.className = "label";
+    cap.textContent = "gesprek 1 → 5";
+    tile.appendChild(cap);
+    c.appendChild(tile);
+  });
+}
+
+/* ───────── init / redraw ───────── */
+function drawAll() {
+  drawTension();
+  drawThemes();
+  drawTalk();
+  drawDirection();
+  drawMatrix();
+  drawLong();
+}
+renderKantelpunten();
+applyTheme(window.matchMedia("(prefers-color-scheme: dark)").matches);
+window.addEventListener("resize", () => drawAll());
+</script>
+</body>
+</html>
