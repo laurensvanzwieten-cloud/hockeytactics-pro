@@ -7,6 +7,7 @@
 > Bijbehorende documenten in deze map:
 > - [`projectplan.md`](projectplan.md) — compact projectplan (~5 pagina's) op basis van dit voorstel
 > - [`dashboard-schets.html`](dashboard-schets.html) — interactieve schets van de analyse-app met fictieve data
+> - [`app.html`](app.html) — werkend prototype: plak een transcript en het dashboard wordt automatisch gevuld (regelgebaseerd, optioneel met AI)
 
 ---
 
