@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gesprekskompas — analyse-app (prototype)</title>
+<style>
+  :root {
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-a:       #2a78d6;
+    --series-b:       #1baf7a;
+    --series-g:       #eda100;
+    --series-m:       #008300;
+    --seq-100: #cde2fb; --seq-200: #9ec5f4; --seq-300: #6da7ec;
+    --seq-400: #3987e5; --seq-500: #256abf; --seq-600: #184f95;
+    --status-good:    #0ca30c;
+    --status-warning: #fab219;
+    --status-serious: #ec835a;
+    --good-text:      #006300;
+  }
+  :root.dark {
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --axis:           #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-a:       #3987e5;
+    --series-b:       #199e70;
+    --series-g:       #c98500;
+    --series-m:       #008300;
+    --good-text:      #0ca30c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; line-height: 1.5; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 20px 20px 56px; }
+  .disclaimer { display: flex; gap: 10px; align-items: center; background: var(--surface-1);
+    border: 1px solid var(--border); border-left: 4px solid var(--status-warning);
+    border-radius: 8px; padding: 10px 14px; margin-bottom: 18px; color: var(--text-secondary); }
+  .disclaimer strong { color: var(--text-primary); }
+  header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin: 6px 0 14px; }
+  header.top h1 { font-size: 22px; margin: 0; }
+  header.top .sub { color: var(--text-muted); font-size: 13px; }
+  .theme-btn { margin-left: auto; border: 1px solid var(--border); background: var(--surface-1);
+    color: var(--text-secondary); border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px; margin-bottom: 16px; }
+  .card h2 { font-size: 16px; margin: 0 0 2px; }
+  .card h3 { font-size: 13.5px; margin: 18px 0 8px; }
+  .card .lede { color: var(--text-muted); font-size: 13px; margin: 0 0 14px; }
+  textarea { width: 100%; min-height: 180px; resize: vertical; font: 13px/1.5 ui-monospace, "SF Mono", Consolas, monospace;
+    background: var(--page); color: var(--text-primary); border: 1px solid var(--axis); border-radius: 8px; padding: 10px 12px; }
+  .btnrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+  button.primary, button.ghost, label.filebtn {
+    font: inherit; font-size: 13.5px; border-radius: 8px; padding: 8px 16px; cursor: pointer; }
+  button.primary { background: var(--text-primary); color: var(--page); border: 1px solid var(--text-primary); font-weight: 600; }
+  button.ghost, label.filebtn { background: var(--surface-1); color: var(--text-secondary); border: 1px solid var(--border); }
+  input[type=file] { display: none; }
+  details.help { margin-top: 12px; }
+  details.help summary { cursor: pointer; color: var(--text-muted); font-size: 12.5px; }
+  details.help pre { background: var(--page); border: 1px solid var(--grid); border-radius: 8px;
+    padding: 10px 12px; font-size: 12px; overflow-x: auto; color: var(--text-secondary); }
+  .error { color: var(--status-serious); font-size: 13px; margin-top: 8px; }
+  .rollen { display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 8px 0 4px; }
+  .rollen label { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+  .rollen select { font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 6px;
+    border: 1px solid var(--axis); background: var(--surface-1); color: var(--text-primary); }
+  nav.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 18px; }
+  nav.tabs button { font: inherit; font-size: 13px; padding: 7px 14px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); }
+  nav.tabs button[aria-selected="true"] { background: var(--text-primary); color: var(--page);
+    border-color: var(--text-primary); font-weight: 600; }
+  section.panel { display: none; }
+  section.panel.active { display: block; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 10px; font-size: 13px; color: var(--text-secondary); }
+  .legend .key { display: inline-flex; align-items: center; gap: 7px; }
+  .key i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+  .key i.dot { width: 9px; height: 9px; border-radius: 50%; }
+  .chart-wrap { position: relative; }
+  svg text { font-family: inherit; }
+  .tooltip { position: absolute; pointer-events: none; display: none; z-index: 5; background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.14);
+    padding: 8px 11px; font-size: 12.5px; color: var(--text-secondary); min-width: 130px; }
+  .tooltip b { color: var(--text-primary); }
+  .tooltip .row { display: flex; align-items: center; gap: 7px; margin-top: 2px; }
+  .tooltip .row i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .tooltip .row .v { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+  table.data { border-collapse: collapse; margin-top: 8px; font-size: 12.5px; width: 100%; max-width: 620px; }
+  table.data th, table.data td { text-align: left; padding: 4px 10px; border-bottom: 1px solid var(--grid);
+    font-variant-numeric: tabular-nums; }
+  table.data th { color: var(--text-muted); font-weight: 600; }
+  table.matrix { border-collapse: separate; border-spacing: 3px; font-size: 13px; }
+  table.matrix th { font-weight: 600; color: var(--text-muted); font-size: 12px; padding: 4px 8px; text-align: center; }
+  table.matrix th.rowh { text-align: right; }
+  table.matrix td { width: 74px; height: 40px; text-align: center; border-radius: 6px;
+    font-variant-numeric: tabular-nums; font-weight: 600; }
+  table.matrix td.empty { background: transparent; color: var(--text-muted); font-weight: 400; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+  .tile { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .tile .label { font-size: 12.5px; color: var(--text-muted); }
+  .tile .value { font-size: 26px; font-weight: 600; margin: 2px 0; }
+  .tile .delta { font-size: 12.5px; color: var(--text-secondary); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .kp-card { border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; scroll-margin-top: 16px; }
+  .kp-card.flash { outline: 2px solid var(--series-a); }
+  .kp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 8px; }
+  .kp-head .num { width: 26px; height: 26px; border-radius: 50%; flex: none; background: var(--text-primary);
+    color: var(--page); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+  .kp-head h3 { margin: 0; font-size: 15px; }
+  .kp-head .time { color: var(--text-muted); font-size: 12.5px; }
+  .fragment { border-left: 3px solid var(--grid); padding: 6px 14px; margin: 10px 0;
+    color: var(--text-secondary); font-size: 13.5px; }
+  .fragment .spk { font-weight: 600; color: var(--text-primary); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+  .chip { font-size: 11.5px; border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; color: var(--text-secondary); }
+  .kp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px 22px; margin-top: 6px; }
+  .kp-grid h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin: 12px 0 4px; }
+  .kp-grid ul { margin: 0; padding-left: 18px; color: var(--text-secondary); }
+  .kp-grid li { margin: 2px 0; }
+  .conf { display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; max-width: 340px; }
+  .conf .track { flex: 1; height: 6px; border-radius: 3px; background: var(--seq-100); overflow: hidden; }
+  .conf .fill { height: 100%; border-radius: 3px; background: var(--seq-500); }
+  .conf .pct { font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 4px 26px; }
+  .summary-grid h3 { margin: 14px 0 4px; }
+  .summary-grid ul { margin: 0 0 6px; padding-left: 18px; color: var(--text-secondary); }
+  .summary-grid li { margin: 3px 0; }
+  input.keyfield { font: inherit; font-size: 13px; width: 100%; max-width: 420px; padding: 8px 12px;
+    border-radius: 8px; border: 1px solid var(--axis); background: var(--page); color: var(--text-primary); }
+  .ai-note { font-size: 12.5px; color: var(--text-muted); margin: 8px 0; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--axis);
+    border-top-color: var(--text-primary); border-radius: 50%; animation: spin 0.8s linear infinite;
+    vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .badge-ai { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; border-radius: 4px;
+    padding: 1px 6px; background: var(--seq-100); color: var(--seq-600); vertical-align: 2px; }
+  footer.foot { color: var(--text-muted); font-size: 12.5px; margin-top: 26px; }
+  footer.foot a { color: var(--text-secondary); }
+  @media (max-width: 640px) { .wrap { padding: 14px 12px 40px; } .card { padding: 14px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="disclaimer" role="note">
+    <span aria-hidden="true">⚠️</span>
+    <span><strong>Onderzoeksprototype — geen gevalideerd meetinstrument.</strong>
+    Alle uitkomsten zijn automatisch gegenereerde, toetsbare <em>hypotheses</em> op basis van eenvoudige taalregels,
+    geen diagnoses of waarheden. Interpretatie blijft aan de bemiddelaar. Gebruik geen echte gesprekken zonder
+    toestemming van alle deelnemers.</span>
+  </div>
+
+  <header class="top">
+    <h1>Gesprekskompas</h1>
+    <span class="sub">analyse-app (prototype) — plak een transcript en verken het gesprek</span>
+    <button class="theme-btn" id="themeBtn" type="button">🌙 Donker</button>
+  </header>
+
+  <!-- ══════════ INVOER ══════════ -->
+  <div class="card" id="inputCard">
+    <h2>1. Gesprekstranscript</h2>
+    <p class="lede">Plak een uitgeschreven gesprek (één regel per spreekbeurt, <code>Naam: tekst</code>), upload een tekstbestand, of probeer het ingebouwde voorbeeldgesprek. Alles wordt lokaal in je browser geanalyseerd — het transcript verlaat je computer niet (behalve als je zelf de optionele AI-analyse start).</p>
+    <textarea id="transcriptInput" placeholder="Bemiddelaar: Welkom terug. Vandaag wilden jullie het over de vakantieplanning hebben.&#10;Ouder A: Klopt. Ik wil graag snel duidelijkheid over de zomerweken.&#10;Ouder B: Nou, vorig jaar heb ík alles opgevangen, dus…"></textarea>
+    <div class="btnrow">
+      <button class="primary" id="analyseBtn" type="button">Analyseer gesprek</button>
+      <button class="ghost" id="demoBtn" type="button">Laad voorbeeldgesprek (fictief)</button>
+      <label class="filebtn">Bestand uploaden (.txt)<input type="file" id="fileInput" accept=".txt,.md,text/plain"></label>
+    </div>
+    <div class="error" id="inputError" hidden></div>
+    <details class="help">
+      <summary>Welk formaat moet het transcript hebben?</summary>
+      <pre>Eén spreekbeurt per regel, met de naam van de spreker gevolgd door een dubbele punt:
+
+Bemiddelaar: Welkom. Waar willen jullie mee beginnen?
+Sandra: Met de vakantieplanning, want die loopt elk jaar mis.
+Jeroen: Dat is niet waar, vorig jaar ging het prima—
+Sandra: (onderbreekt) Omdat ik alles heb geregeld!
+
+Tips:
+- Een afgebroken zin eindigend op — of ... gevolgd door een andere spreker
+  wordt herkend als onderbreking; "(onderbreekt)" mag ook.
+- Wie de bemiddelaar is wordt herkend aan de naam (bemiddelaar/mediator);
+  je kunt de rollen hieronder ook zelf toewijzen.
+- Regels zonder "Naam:" worden bij de vorige spreekbeurt gevoegd.</pre>
+    </details>
+  </div>
+
+  <!-- ══════════ ROLLEN ══════════ -->
+  <div class="card" id="rolesCard" hidden>
+    <h2>2. Rollen</h2>
+    <p class="lede">Controleer wie welke rol heeft; de analyse wordt direct bijgewerkt.</p>
+    <div class="rollen" id="rolesRow"></div>
+  </div>
+
+  <!-- ══════════ RESULTATEN ══════════ -->
+  <div id="results" hidden>
+    <nav class="tabs" role="tablist" aria-label="Weergaven">
+      <button role="tab" aria-selected="true"  data-tab="tijdlijn">Spanningstijdlijn</button>
+      <button role="tab" aria-selected="false" data-tab="thema">Themakaart</button>
+      <button role="tab" aria-selected="false" data-tab="interactie">Interactiekaart</button>
+      <button role="tab" aria-selected="false" data-tab="kantelpunten">Kantelpunten</button>
+      <button role="tab" aria-selected="false" data-tab="ai">AI-analyse</button>
+    </nav>
+
+    <section class="panel active" id="panel-tijdlijn">
+      <div class="card">
+        <h2>Spanningstijdlijn</h2>
+        <p class="lede">Geschatte interactiespanning (index 0–100) per spreekbeurt, berekend uit taalsignalen (verwijten, generalisaties, erkenning), onderbrekingen en beurtwisseling. Genummerde punten zijn kantelpunten — klik erop voor de kaart. Dit is een heuristiek, geen meting.</p>
+        <div class="legend" id="legendTijdlijn"></div>
+        <div class="chart-wrap" id="tensionChart"></div>
+        <details class="help"><summary>Toon als tabel</summary><table class="data" id="tensionTable"></table></details>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-thema">
+      <div class="card">
+        <h2>Themakaart</h2>
+        <p class="lede">Herkende gespreksthema's (op trefwoorden), hun aandeel in het gesprek en de gemiddelde spanning tijdens dat thema.</p>
+        <div class="chart-wrap" id="themeChart"></div>
+        <details class="help"><summary>Toon als tabel</summary><table class="data" id="themeTable"></table></details>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-interactie">
+      <div class="grid2">
+        <div class="card">
+          <h2>Spreektijdverdeling</h2>
+          <p class="lede">Aandeel in het totale aantal gesproken woorden.</p>
+          <div class="legend" id="legendSpreektijd"></div>
+          <div class="chart-wrap" id="talkChart"></div>
+          <h3>Communicatierichting</h3>
+          <p class="lede">Reageren ouders rechtstreeks op elkaar, of loopt het gesprek via de bemiddelaar?</p>
+          <div class="chart-wrap" id="dirChart"></div>
+        </div>
+        <div class="card">
+          <h2>Onderbrekingen</h2>
+          <p class="lede">Wie onderbreekt wie (aantal keer, herkend aan afgebroken zinnen en markeringen).</p>
+          <div class="chart-wrap" id="matrixWrap"></div>
+          <h3>Overige signalen</h3>
+          <div class="tiles" id="signalTiles"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-kantelpunten">
+      <div class="card">
+        <h2>Kantelpuntkaarten</h2>
+        <p class="lede">Automatisch gemarkeerde momenten: spanningspieken en mogelijk gemiste toenaderingen. Per kaart: fragment, signalen, een hypothese mét betrouwbaarheidsindicatie, alternatieve verklaringen en reflectievragen.</p>
+        <div id="kpContainer"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-ai">
+      <div class="card">
+        <h2>AI-analyse <span class="badge-ai">optioneel</span></h2>
+        <p class="lede">Laat Claude (Anthropic) een verdiepende analyse maken: gesprekssamenvatting, hypotheses per kantelpunt en reflectievragen. Hiervoor is een eigen Anthropic API-sleutel nodig.</p>
+        <p class="ai-note">⚠️ Privacy: als je dit gebruikt wordt het transcript naar de API van Anthropic gestuurd. Doe dit niet met echte gesprekken zonder toestemming van alle deelnemers. Kosten zijn voor je eigen API-account.</p>
+        <label style="display:block;font-size:12.5px;color:var(--text-muted);margin-bottom:4px" for="apiKey">Anthropic API-sleutel (begint met <code>sk-ant-</code>)</label>
+        <input class="keyfield" type="password" id="apiKey" placeholder="sk-ant-api03-…" autocomplete="off">
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);margin:8px 0">
+          <input type="checkbox" id="rememberKey"> Sleutel onthouden in deze browser (localStorage)
+        </label>
+        <div class="btnrow">
+          <button class="primary" id="aiBtn" type="button">AI-analyse uitvoeren</button>
+        </div>
+        <div class="error" id="aiError" hidden></div>
+        <div id="aiStatus" class="ai-note" hidden></div>
+        <div id="aiResult" hidden>
+          <h3>Gesprekssamenvatting <span class="badge-ai">AI</span></h3>
+          <div class="summary-grid" id="aiSummary"></div>
+          <h3>Kantelpunten volgens de AI <span class="badge-ai">AI</span></h3>
+          <div id="aiKantelpunten"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="foot">
+    Prototype bij het onderzoeksvoorstel <a href="onderzoeksvoorstel.md">Gesprekskompas</a> ·
+    <a href="projectplan.md">projectplan</a> ·
+    <a href="dashboard-schets.html">dashboardschets met vaste voorbeelddata</a>.
+    De ingebouwde analyse gebruikt eenvoudige, transparante taalregels (werkpakket 4, model A/C uit het voorstel) en is bedoeld om het concept te demonstreren — niet om echte bemiddelingsgesprekken te beoordelen.
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ═══════════════ thema (licht/donker) ═══════════════ */
+const rootEl = document.documentElement;
+const themeBtn = document.getElementById("themeBtn");
+function applyTheme(dark) {
+  rootEl.classList.toggle("dark", dark);
+  themeBtn.textContent = dark ? "☀️ Licht" : "🌙 Donker";
+  if (state.analysis) drawAll();
+}
+themeBtn.addEventListener("click", () => applyTheme(!rootEl.classList.contains("dark")));
+
+/* ═══════════════ helpers ═══════════════ */
+function cssVar(name) { return getComputedStyle(rootEl).getPropertyValue(name).trim(); }
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function barPathH(x, y, w, h, r) {
+  r = Math.min(r, w, h / 2);
+  if (w <= 0) return "";
+  return `M${x},${y} h${Math.max(0, w - r)} a${r},${r} 0 0 1 ${r},${r} v${h - 2 * r} a${r},${r} 0 0 1 ${-r},${r} h${-Math.max(0, w - r)} z`;
+}
+function makeTooltip(wrap) {
+  const tip = document.createElement("div");
+  tip.className = "tooltip";
+  wrap.appendChild(tip);
+  return tip;
+}
+function placeTip(tip, wrap, x, y) {
+  const r = wrap.getBoundingClientRect();
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  let left = x + 14, top = y - th - 10;
+  if (left + tw > r.width) left = x - tw - 14;
+  if (top < 0) top = y + 14;
+  tip.style.left = left + "px";
+  tip.style.top = top + "px";
+}
+
+/* ═══════════════ transcript parsen ═══════════════ */
+function parseTranscript(text) {
+  const lines = text.split(/\r?\n/);
+  const utterances = [];
+  const speakerRe = /^\s*(?:\[[\d:.,]+\]\s*)?([A-Za-zÀ-ÿ0-9 ._'-]{1,40}?)\s*:\s+(.+)$/;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(speakerRe);
+    if (m && m[2]) {
+      utterances.push({ speaker: m[1].trim(), text: m[2].trim() });
+    } else if (utterances.length) {
+      utterances[utterances.length - 1].text += " " + line;
+    }
+  }
+  return utterances;
+}
+
+/* ═══════════════ taalsignalen (regelgebaseerd) ═══════════════ */
+const PAT = {
+  generalisatie:  /\b(altijd|nooit|elke keer|steeds weer|steeds maar|constant|de hele tijd|weer hetzelfde)\b/i,
+  verwijt:        /\b(jouw schuld|door jou|dankzij jou|typisch|zoals gewoonlijk|je (luistert|denkt) (niet|nooit|alleen)|jij bent degene|het is nooit (eens )?goed)\b/i,
+  intentie:       /\b(je wilt gewoon|je doet het expres|expres|het boeit je niet|dat doe je om|je probeert (me|mij)|je zoekt)\b/i,
+  erkenning:      /\b(dank(jewel| je wel)?|waardeer|fijn dat|goed dat je|je hebt (gelijk|een punt)|(een )?terecht punt|dat klopt|begrijp (ik|je|jou)|snap (ik|je)|excuus|sorry|(deed|doe|regel) je (trouwens )?(altijd )?goed|dat wil ik (wel )?gezegd hebben|mag ook wel (eens )?gezegd|wil ik best toegeven|knap)\b/i,
+  toekomst:       /\b(volgende keer|vanaf nu|voortaan|afspreken|afspraak|voorstel|stel voor|zullen we|kunnen we (afspreken|proberen)|laten we|proefperiode|evalueren)\b/i,
+  kind:           /\b(kind|kinderen|dochter|zoon|meiden|meisjes|jongens|kids|hem|haar op school)\b/i,
+  zelfreflectie:  /\b(ik had (ook|misschien)|ik merk dat ik|mijn aandeel|ik zal proberen|ik probeer|ik heb (daar|er) (ook )?een rol|van mijn kant|geef ik toe|wil ik (best|wel) toegeven)\b/i,
+  oplossing:      /\b(wat als we|een idee|misschien kunnen we|optie|alternatief|compromis)\b/i,
+  interventieMarker: /\b(vat (even )?samen|samenvatten|hoor ik (jullie|je|u)|even vertragen|ik wil hier even|onderliggende zorg|wat maakt|belang van|voor (de|jullie) kinderen|om de beurt|laten we (even )?terug)\b/i
+};
+const THEMES = [
+  { key: "vakantie",     naam: "Vakantie",              re: /\b(vakantie(planning|dagen|weken)?|zomer(weken|vakantie|planning)?|meivakantie|kerstvakantie|weken? (in de )?zomer|augustus|zes weken)\b/i },
+  { key: "overdracht",   naam: "Overdrachtsmomenten",   re: /\b(overdracht|ophalen|ophaal|brengen|wissel(dag|moment)?|voordeur|halen)\b/i },
+  { key: "zorgregeling", naam: "Zorgregeling",          re: /\b(zorgregeling|omgangsregeling|rooster|schema|week[- ]om[- ]week|co-ouderschap|verdeling)\b/i },
+  { key: "school",       naam: "School",                re: /\b(school|schoolkeuze|juf|meester|huiswerk|rapport|leraar|klas)\b/i },
+  { key: "financien",    naam: "Financiën",             re: /\b(geld|alimentatie|kosten|betalen|rekening|bijdrage|financi)\b/i },
+  { key: "communicatie", naam: "Communicatie onderling",re: /\b(appen|app(je)?|bellen|bericht|mail|reageren|reactie|communicatie|bereikbaar|last[- ]minute)\b/i },
+  { key: "partner",      naam: "Nieuwe partner",        re: /\b(nieuwe (vriend|vriendin|partner)|stiefvader|stiefmoeder|je vriendin|je vriend)\b/i },
+  { key: "kindpersp",    naam: "Perspectief van het kind", re: /\b(voor (de|onze) (kinderen|meiden|jongens)|wat (merken|vinden) (de|ze)|het kind centraal|belang van (het kind|de kinderen))\b/i }
+];
+
+function detectSignals(text) {
+  const s = [];
+  for (const k of ["generalisatie", "verwijt", "intentie", "erkenning", "toekomst", "kind", "zelfreflectie", "oplossing"]) {
+    if (PAT[k].test(text)) s.push(k);
+  }
+  if (/[!]{1,}/.test(text)) s.push("uitroep");
+  if (/\b[A-ZÀ-Ý]{4,}\b/.test(text)) s.push("caps");
+  if (/\?/.test(text)) s.push("vraag");
+  return s;
+}
+const SIGNAL_LABEL = {
+  generalisatie: "generalisatie ('altijd/nooit')", verwijt: "verwijt/beschuldiging",
+  intentie: "intentietoeschrijving", erkenning: "erkenning/waardering",
+  toekomst: "toekomstgerichte taal", kind: "kindperspectief", zelfreflectie: "zelfreflectie",
+  oplossing: "oplossingsvoorstel", uitroep: "uitroep", caps: "nadruk (hoofdletters)",
+  vraag: "vraag", onderbreekt: "onderbreking"
+};
+
+/* ═══════════════ analyse ═══════════════ */
+const state = { utterances: null, roles: {}, analysis: null };
+
+function guessRoles(utterances) {
+  const speakers = [...new Set(utterances.map(u => u.speaker))];
+  const roles = {};
+  let parents = ["A", "B"];
+  for (const sp of speakers) {
+    if (/bemiddel|mediator|begeleid/i.test(sp)) roles[sp] = "M";
+  }
+  for (const sp of speakers) {
+    if (roles[sp]) continue;
+    roles[sp] = parents.length ? parents.shift() : "X";
+  }
+  return roles;
+}
+
+function analyse(utterances, roles) {
+  const n = utterances.length;
+  const roleOf = u => roles[u.speaker] || "X";
+  const nameOf = r => Object.keys(roles).find(k => roles[k] === r) || (r === "A" ? "Ouder A" : r === "B" ? "Ouder B" : "Bemiddelaar");
+
+  /* per-uiting features */
+  const feats = utterances.map((u, i) => {
+    const sig = detectSignals(u.text);
+    let interrupted = false;
+    if (i > 0) {
+      const prev = utterances[i - 1].text;
+      if (/(—|…|\.\.\.|-)\s*$/.test(prev) && roleOf(utterances[i - 1]) !== roleOf(u)) interrupted = true;
+    }
+    if (/^\s*\(onderbreekt\)/i.test(u.text)) interrupted = true;
+    if (interrupted) sig.push("onderbreekt");
+    return { sig, interrupted, words: u.text.split(/\s+/).length };
+  });
+
+  /* spanningsreeks per ouder */
+  const BASE = 30;
+  let tA = BASE, tB = BASE;
+  const series = [];
+  const bump = { verwijt: 15, generalisatie: 11, intentie: 13, uitroep: 5, caps: 9, onderbreekt: 11,
+                 erkenning: -12, toekomst: -7, zelfreflectie: -6, oplossing: -6 };
+  feats.forEach((f, i) => {
+    const r = roleOf(utterances[i]);
+    let dSelf = 0;
+    for (const s of f.sig) if (bump[s]) dSelf += bump[s];
+    if (r === "A") {
+      tA += dSelf;
+      if (f.sig.includes("verwijt") || f.sig.includes("intentie")) tB += 9;
+      if (f.sig.includes("generalisatie")) tB += 5;
+      if (f.sig.includes("erkenning")) tB -= 6;
+      if (f.interrupted) tB += 5;
+    } else if (r === "B") {
+      tB += dSelf;
+      if (f.sig.includes("verwijt") || f.sig.includes("intentie")) tA += 9;
+      if (f.sig.includes("generalisatie")) tA += 5;
+      if (f.sig.includes("erkenning")) tA -= 6;
+      if (f.interrupted) tA += 5;
+    } else if (r === "M") {
+      const damp = PAT.interventieMarker.test(utterances[i].text) ? 8 : 3;
+      tA -= damp; tB -= damp;
+    }
+    /* verval richting basiswaarde */
+    tA = tA + (BASE - tA) * 0.035;
+    tB = tB + (BASE - tB) * 0.035;
+    tA = Math.max(5, Math.min(95, tA));
+    tB = Math.max(5, Math.min(95, tB));
+    series.push({ i, A: Math.round(tA), B: Math.round(tB), G: Math.round((tA + tB) / 2) });
+  });
+
+  /* thema per uiting (met doorloop) */
+  let current = null;
+  const themeOf = utterances.map(u => {
+    for (const t of THEMES) if (t.re.test(u.text)) { current = t.key; return t.key; }
+    return current;
+  });
+  const themeStats = {};
+  utterances.forEach((u, i) => {
+    const k = themeOf[i] || "overig";
+    if (!themeStats[k]) themeStats[k] = { woorden: 0, beurten: 0, spanning: 0, segmenten: 0, laatste: -9, besluit: false };
+    const st = themeStats[k];
+    st.woorden += feats[i].words;
+    st.beurten++;
+    st.spanning += series[i].G;
+    if (i - st.laatste > 4) st.segmenten++;
+    st.laatste = i;
+    if (feats[i].sig.includes("toekomst") && /\b(afspreken|afspraak|akkoord|deal|proberen we|doen we)\b/i.test(u.text)) st.besluit = true;
+  });
+  const totalWords = feats.reduce((s, f) => s + f.words, 0);
+  const themes = Object.entries(themeStats)
+    .map(([k, st]) => ({
+      key: k,
+      naam: (THEMES.find(t => t.key === k) || { naam: "Overig / procesmatig" }).naam,
+      aandeel: Math.round(100 * st.woorden / totalWords),
+      spanning: Math.round(st.spanning / st.beurten),
+      status: st.besluit ? "besluit" : (st.segmenten >= 2 ? "terugkerend" : "besproken")
+    }))
+    .sort((a, b) => b.aandeel - a.aandeel);
+
+  /* interactie */
+  const talk = { A: 0, B: 0, M: 0, X: 0 };
+  utterances.forEach((u, i) => { talk[roleOf(u)] += feats[i].words; });
+  const matrix = { A: { A: 0, B: 0, M: 0 }, B: { A: 0, B: 0, M: 0 }, M: { A: 0, B: 0, M: 0 } };
+  feats.forEach((f, i) => {
+    if (f.interrupted && i > 0) {
+      const who = roleOf(utterances[i]), whom = roleOf(utterances[i - 1]);
+      if (matrix[who] && matrix[who][whom] !== undefined && who !== whom) matrix[who][whom]++;
+    }
+  });
+  let direct = 0, viaM = 0;
+  utterances.forEach((u, i) => {
+    if (i === 0) return;
+    const r = roleOf(u), p = roleOf(utterances[i - 1]);
+    if ((r === "A" && p === "B") || (r === "B" && p === "A")) direct++;
+    else if ((r === "A" || r === "B") && p === "M") viaM++;
+  });
+  const dirTotal = direct + viaM || 1;
+  const counts = { erkenning: 0, vragen: 0, kind: 0, zelfreflectie: 0 };
+  feats.forEach(f => {
+    if (f.sig.includes("erkenning")) counts.erkenning++;
+    if (f.sig.includes("vraag")) counts.vragen++;
+    if (f.sig.includes("kind")) counts.kind++;
+    if (f.sig.includes("zelfreflectie")) counts.zelfreflectie++;
+  });
+
+  /* kantelpunten: pieken in gezamenlijke spanning (dynamische drempel) */
+  const kps = [];
+  const G = series.map(s => s.G);
+  const gMean = G.reduce((s, v) => s + v, 0) / (G.length || 1);
+  const gMax = Math.max(...G);
+  const thresh = Math.max(42, gMean + (gMax - gMean) * 0.45);
+  for (let i = 1; i < n - 1; i++) {
+    if (G[i] >= thresh && G[i] >= G[i - 1] && G[i] > G[i + 1]) {
+      if (kps.length && i - kps[kps.length - 1].i < 5) {
+        if (G[i] > G[kps[kps.length - 1].i]) kps[kps.length - 1] = { i, type: "piek" };
+      } else kps.push({ i, type: "piek" });
+    }
+  }
+  kps.sort((a, b) => G[b.i] - G[a.i]);
+  const topKps = kps.slice(0, 3).sort((a, b) => a.i - b.i);
+  /* gemiste toenadering: onvoorwaardelijke erkenning door een ouder, direct daarna geen respons van de ander */
+  feats.forEach((f, i) => {
+    const r = roleOf(utterances[i]);
+    const txt = utterances[i].text;
+    const onvoorwaardelijk = f.sig.includes("erkenning") &&
+      !f.sig.includes("verwijt") && !f.sig.includes("intentie") &&
+      !/,\s*maar\b|\bmaar\b.*\b(jij|je|jouw)\b/i.test(txt);
+    if ((r === "A" || r === "B") && onvoorwaardelijk && i + 1 < n) {
+      const nr = roleOf(utterances[i + 1]);
+      const nf = feats[i + 1];
+      if (nr !== "M" && nr !== r && !nf.sig.includes("erkenning") && !nf.sig.includes("vraag")) {
+        if (topKps.length < 4) topKps.push({ i, type: "toenadering" });
+      }
+    }
+  });
+  topKps.sort((a, b) => a.i - b.i);
+
+  const kantelpunten = topKps.map((kp, idx) => {
+    const i = kp.i;
+    const frag = (kp.type === "toenadering"
+      ? utterances.slice(Math.max(0, i - 1), Math.min(n, i + 2))
+      : utterances.slice(Math.max(0, i - 2), Math.min(n, i + 2)))
+      .map(u => [u.speaker, u.text]);
+    const sig = feats[i].sig.map(s => SIGNAL_LABEL[s]).filter(Boolean);
+    const theme = (THEMES.find(t => t.key === themeOf[i]) || { naam: "algemeen" }).naam;
+    let hypothese, alternatieven, reflectie, titel;
+    if (kp.type === "toenadering") {
+      titel = "Mogelijke gemiste toenadering";
+      hypothese = `${utterances[i].speaker} lijkt hier waardering of erkenning uit te spreken; de volgende spreekbeurt gaat er niet op in. Mogelijk is een toenaderingspoging onopgemerkt gebleven.`;
+      alternatieven = [
+        "De opmerking kan wél zijn gehoord, maar bewust geparkeerd om bij het onderwerp te blijven.",
+        "De erkenning kan procedureel bedoeld zijn en geen toenaderingspoging."
+      ];
+      reflectie = [
+        "Herkent u dit moment uit het gesprek?",
+        "Wat zou helpen om toenaderingspogingen tijdens het gesprek sneller te markeren?"
+      ];
+    } else {
+      titel = `Spanningspiek rond '${theme.toLowerCase()}'`;
+      const drivers = feats[i].sig.filter(s => ["verwijt", "generalisatie", "intentie", "onderbreekt"].includes(s));
+      hypothese = drivers.length
+        ? `De spanning loopt hier op; in de tekst zijn ${drivers.map(d => SIGNAL_LABEL[d]).join(", ")} herkend. Mogelijk raakt het onderwerp '${theme.toLowerCase()}' aan een onderliggende zorg (bijv. erkenning, voorspelbaarheid of gelijkwaardigheid).`
+        : `De spanning loopt hier op zonder duidelijke taalsignalen; mogelijk speelt de opeenvolging van beurten of een eerder moment mee.`;
+      alternatieven = [
+        "Verhoogde intensiteit kan ook betrokkenheid bij het onderwerp zijn, geen escalatie.",
+        "De regels herkennen alleen letterlijke formuleringen; toon en context ontbreken in deze analyse."
+      ];
+      reflectie = [
+        "Welke onderliggende zorg lijkt hier nog niet erkend?",
+        "Was dit een moment voor vertragen, samenvatten, begrenzen of juist doorvragen?"
+      ];
+    }
+    /* interventie: eerstvolgende bemiddelaarsbeurt met interventiemarker */
+    let interventie = "Geen duidelijke interventie herkend in de beurten direct hierna.";
+    for (let j = i; j < Math.min(n, i + 4); j++) {
+      if (roleOf(utterances[j]) === "M" && PAT.interventieMarker.test(utterances[j].text)) {
+        interventie = `Bemiddelaar (beurt ${j + 1}): “${utterances[j].text}”`;
+        break;
+      }
+    }
+    const after = series[Math.min(n - 1, i + 4)].G - series[i].G;
+    const verloop = after <= -8 ? `De geschatte spanning daalt daarna (${after} punten binnen 4 beurten).`
+      : after >= 8 ? `De geschatte spanning loopt daarna verder op (+${after} punten binnen 4 beurten).`
+      : "De geschatte spanning blijft daarna ongeveer gelijk.";
+    const betrouwbaarheid = Math.min(85, 30 + 9 * feats[i].sig.length + (kp.type === "piek" ? 5 : 0));
+    return { n: idx + 1, i, titel, tijd: `spreekbeurt ${i + 1} van ${n}`, thema: theme, frag, sig,
+             hypothese, betrouwbaarheid, alternatieven, interventie, verloop, reflectie };
+  });
+
+  return { series, themes, talk, matrix, direct: Math.round(100 * viaM / dirTotal), counts, kantelpunten,
+           n, nameOf, roleOf, feats, themeOf };
+}
+
+/* ═══════════════ rendering ═══════════════ */
+const tabs = () => document.querySelectorAll("nav.tabs button");
+function showTab(name) {
+  tabs().forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
+  document.querySelectorAll("section.panel").forEach(p =>
+    p.classList.toggle("active", p.id === "panel-" + name));
+}
+document.querySelector("nav.tabs").addEventListener("click", e => {
+  if (e.target.dataset.tab) showTab(e.target.dataset.tab);
+});
+
+function drawTension() {
+  const a = state.analysis;
+  const wrap = document.getElementById("tensionChart");
+  wrap.innerHTML = "";
+  const W = Math.max(560, Math.min(1040, wrap.clientWidth || 1000)), H = 320;
+  const m = { l: 40, r: 110, t: 34, b: 34 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const N = a.n;
+  const X = i => m.l + (N <= 1 ? 0 : (i / (N - 1)) * iw);
+  const Y = v => m.t + (1 - v / 100) * ih;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img",
+    "aria-label": "Lijngrafiek van de geschatte interactiespanning per spreekbeurt" }, wrap);
+  for (let v = 0; v <= 100; v += 25) {
+    el("line", { x1: m.l, x2: m.l + iw, y1: Y(v), y2: Y(v), stroke: cssVar("--grid"), "stroke-width": 1 }, svg);
+    el("text", { x: m.l - 8, y: Y(v) + 4, "text-anchor": "end", "font-size": 11, fill: cssVar("--text-muted") }, svg).textContent = v;
+  }
+  el("line", { x1: m.l, x2: m.l + iw, y1: Y(0), y2: Y(0), stroke: cssVar("--axis"), "stroke-width": 1 }, svg);
+  const step = Math.max(1, Math.round(N / 9));
+  for (let i = 0; i < N; i += step) {
+    el("text", { x: X(i), y: H - 12, "text-anchor": "middle", "font-size": 11, fill: cssVar("--text-muted") }, svg).textContent = i + 1;
+  }
+  el("text", { x: m.l + iw / 2, y: H - 0.5, "text-anchor": "middle", "font-size": 11, fill: cssVar("--text-muted") }, svg).textContent = "spreekbeurt";
+
+  const seriesDef = [
+    { key: "A", name: a.nameOf("A"), short: a.nameOf("A"), color: cssVar("--series-a") },
+    { key: "B", name: a.nameOf("B"), short: a.nameOf("B"), color: cssVar("--series-b") },
+    { key: "G", name: "Gezamenlijke interactie", short: "Gezamenlijk", color: cssVar("--series-g") }
+  ];
+  const gPts = a.series.map((s, i) => `${X(i)},${Y(s.G)}`).join(" ");
+  el("polygon", { points: `${X(0)},${Y(0)} ${gPts} ${X(N - 1)},${Y(0)}`, fill: cssVar("--series-g"), opacity: 0.08 }, svg);
+  /* eindlabels met simpele anti-botsing */
+  const ends = seriesDef.map(s => ({ s, y: Y(a.series[N - 1][s.key]) })).sort((p, q) => p.y - q.y);
+  for (let k = 1; k < ends.length; k++) if (ends[k].y - ends[k - 1].y < 15) ends[k].y = ends[k - 1].y + 15;
+  seriesDef.forEach(s => {
+    const pts = a.series.map((v, i) => `${X(i)},${Y(v[s.key])}`).join(" ");
+    el("polyline", { points: pts, fill: "none", stroke: s.color, "stroke-width": 2,
+      "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+    el("circle", { cx: X(N - 1), cy: Y(a.series[N - 1][s.key]), r: 4, fill: s.color,
+      stroke: cssVar("--surface-1"), "stroke-width": 2 }, svg);
+    const lab = ends.find(e => e.s === s);
+    el("text", { x: X(N - 1) + 9, y: lab.y + 4, "font-size": 11.5, fill: cssVar("--text-secondary") }, svg)
+      .textContent = s.short.length > 14 ? s.short.slice(0, 13) + "…" : s.short;
+  });
+  /* kantelpuntmarkers */
+  a.kantelpunten.forEach(kp => {
+    const x = X(kp.i);
+    el("line", { x1: x, x2: x, y1: m.t - 4, y2: Y(0), stroke: cssVar("--axis"), "stroke-width": 1, opacity: 0.55 }, svg);
+    const g = el("g", { cursor: "pointer", role: "button", tabindex: 0, "aria-label": kp.titel }, svg);
+    el("circle", { cx: x, cy: m.t - 12, r: 9, fill: cssVar("--text-primary"),
+      stroke: cssVar("--surface-1"), "stroke-width": 2 }, g);
+    el("text", { x, y: m.t - 8, "text-anchor": "middle", "font-size": 10.5, "font-weight": 700,
+      fill: cssVar("--page") }, g).textContent = kp.n;
+    const open = () => { showTab("kantelpunten"); flashCard(kp.n); };
+    g.addEventListener("click", open);
+    g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+  });
+  /* crosshair + tooltip */
+  const tip = makeTooltip(wrap);
+  const cross = el("line", { y1: m.t, y2: Y(0), stroke: cssVar("--axis"), "stroke-width": 1, visibility: "hidden" }, svg);
+  const dots = seriesDef.map(s => el("circle", { r: 4.5, fill: s.color, stroke: cssVar("--surface-1"),
+    "stroke-width": 2, visibility: "hidden" }, svg));
+  svg.addEventListener("mousemove", e => {
+    const r = svg.getBoundingClientRect();
+    const sx = (e.clientX - r.left) * (W / r.width);
+    if (sx < m.l - 10 || sx > m.l + iw + 10) return;
+    const i = Math.max(0, Math.min(N - 1, Math.round(((sx - m.l) / iw) * (N - 1))));
+    cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i));
+    cross.setAttribute("visibility", "visible");
+    seriesDef.forEach((s, k) => {
+      dots[k].setAttribute("cx", X(i)); dots[k].setAttribute("cy", Y(a.series[i][s.key]));
+      dots[k].setAttribute("visibility", "visible");
+    });
+    const u = state.utterances[i];
+    tip.innerHTML = `<b>Beurt ${i + 1} — ${esc(u.speaker)}</b>` +
+      seriesDef.map(s => `<div class="row"><i style="background:${s.color}"></i>${esc(s.short)}<span class="v">${a.series[i][s.key]}</span></div>`).join("") +
+      `<div class="row" style="margin-top:5px">${esc(u.text.slice(0, 90))}${u.text.length > 90 ? "…" : ""}</div>`;
+    tip.style.display = "block";
+    const wr = wrap.getBoundingClientRect();
+    placeTip(tip, wrap, e.clientX - wr.left, e.clientY - wr.top);
+  });
+  svg.addEventListener("mouseleave", () => {
+    tip.style.display = "none";
+    cross.setAttribute("visibility", "hidden");
+    dots.forEach(d => d.setAttribute("visibility", "hidden"));
+  });
+  document.getElementById("legendTijdlijn").innerHTML =
+    seriesDef.map(s => `<span class="key"><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join("") +
+    `<span class="key" style="color:var(--text-muted)">⓿ kantelpunt (klikbaar)</span>`;
+  const tbl = document.getElementById("tensionTable");
+  const tstep = Math.max(1, Math.round(N / 12));
+  tbl.innerHTML = `<tr><th>Beurt</th><th>${esc(a.nameOf("A"))}</th><th>${esc(a.nameOf("B"))}</th><th>Gezamenlijk</th></tr>` +
+    a.series.filter((_, i) => i % tstep === 0).map(s =>
+      `<tr><td>${s.i + 1}</td><td>${s.A}</td><td>${s.B}</td><td>${s.G}</td></tr>`).join("");
+}
+
+function drawThemes() {
+  const a = state.analysis;
+  const wrap = document.getElementById("themeChart");
+  wrap.innerHTML = "";
+  const themes = a.themes.slice(0, 8);
+  const W = Math.max(560, Math.min(1040, wrap.clientWidth || 1000));
+  const rowH = 42, m = { l: 200, r: 240, t: 26 };
+  const H = m.t + themes.length * rowH + 26;
+  const iw = W - m.l - m.r;
+  const maxA = Math.max(...themes.map(t => t.aandeel), 10);
+  const mx = m.l + iw + 60, mw = 100;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img",
+    "aria-label": "Staafdiagram: aandeel per gespreksthema met gemiddelde spanning" }, wrap);
+  el("text", { x: mx, y: 14, "font-size": 11, fill: cssVar("--text-muted") }, svg).textContent = "gem. spanning (0–100)";
+  [0, Math.round(maxA / 2), maxA].forEach(v => {
+    const x = m.l + (v / maxA) * iw;
+    el("line", { x1: x, x2: x, y1: m.t, y2: m.t + themes.length * rowH, stroke: cssVar("--grid"), "stroke-width": 1 }, svg);
+    el("text", { x, y: H - 8, "text-anchor": "middle", "font-size": 11, fill: cssVar("--text-muted") }, svg).textContent = v + "%";
+  });
+  const tip = makeTooltip(wrap);
+  const STATUS_TXT = { besluit: "✓ met afspraak besproken", terugkerend: "↻ terugkerend zonder besluit", besproken: "· besproken" };
+  themes.forEach((th, i) => {
+    const y = m.t + i * rowH + 6, h = 20;
+    const w = (th.aandeel / maxA) * iw;
+    el("text", { x: m.l - 12, y: y + h / 2 + 4, "text-anchor": "end", "font-size": 12.5,
+      fill: cssVar("--text-primary") }, svg).textContent = th.naam;
+    const bar = el("path", { d: barPathH(m.l, y, Math.max(3, w), h, 4), fill: cssVar("--seq-400") }, svg);
+    el("text", { x: m.l + Math.max(3, w) + 8, y: y + h / 2 + 4, "font-size": 12, fill: cssVar("--text-secondary") }, svg)
+      .textContent = th.aandeel + "%";
+    el("rect", { x: mx, y: y + h / 2 - 3, width: mw, height: 6, rx: 3, fill: cssVar("--seq-100") }, svg);
+    el("rect", { x: mx, y: y + h / 2 - 3, width: mw * th.spanning / 100, height: 6, rx: 3, fill: cssVar("--seq-600") }, svg);
+    el("text", { x: mx + mw + 8, y: y + h / 2 + 4, "font-size": 12, fill: cssVar("--text-secondary") }, svg).textContent = th.spanning;
+    bar.addEventListener("mousemove", e => {
+      tip.innerHTML = `<b>${esc(th.naam)}</b><div class="row">Aandeel<span class="v">${th.aandeel}%</span></div>` +
+        `<div class="row">Gem. spanning<span class="v">${th.spanning}</span></div>` +
+        `<div class="row">${STATUS_TXT[th.status]}</div>`;
+      tip.style.display = "block";
+      const wr = wrap.getBoundingClientRect();
+      placeTip(tip, wrap, e.clientX - wr.left, e.clientY - wr.top);
+    });
+    bar.addEventListener("mouseleave", () => tip.style.display = "none");
+  });
+  const tbl = document.getElementById("themeTable");
+  tbl.innerHTML = "<tr><th>Thema</th><th>Aandeel</th><th>Gem. spanning</th><th>Status</th></tr>" +
+    themes.map(t => `<tr><td>${esc(t.naam)}</td><td>${t.aandeel}%</td><td>${t.spanning}</td><td>${STATUS_TXT[t.status]}</td></tr>`).join("");
+}
+
+function drawInteraction() {
+  const a = state.analysis;
+  /* spreektijd */
+  const wrap = document.getElementById("talkChart");
+  wrap.innerHTML = "";
+  const total = a.talk.A + a.talk.B + a.talk.M + a.talk.X || 1;
+  const parts = [
+    { who: a.nameOf("A"), pct: Math.round(100 * a.talk.A / total), v: "--series-a" },
+    { who: a.nameOf("B"), pct: Math.round(100 * a.talk.B / total), v: "--series-b" },
+    { who: a.nameOf("M"), pct: Math.round(100 * a.talk.M / total), v: "--series-m" }
+  ].filter(p => p.pct > 0);
+  const W = Math.max(280, wrap.clientWidth || 420);
+  const svg = el("svg", { viewBox: `0 0 ${W} 50`, width: "100%", role: "img",
+    "aria-label": "Spreektijdverdeling per deelnemer" }, wrap);
+  let x = 0;
+  parts.forEach((p, i) => {
+    const w = (p.pct / 100) * W - (i < parts.length - 1 ? 2 : 0);
+    el("rect", { x, y: 14, width: Math.max(2, w), height: 22, rx: i === 0 || i === parts.length - 1 ? 4 : 0, fill: cssVar(p.v) }, svg);
+    if (w > 46) el("text", { x: x + w / 2, y: 29, "text-anchor": "middle", "font-size": 12,
+      "font-weight": 600, fill: "#ffffff" }, svg).textContent = p.pct + "%";
+    x += w + 2;
+  });
+  document.getElementById("legendSpreektijd").innerHTML =
+    parts.map(p => `<span class="key"><i class="dot" style="background:${cssVar(p.v)}"></i>${esc(p.who)} — ${p.pct}%</span>`).join("");
+  /* richting */
+  const dw = document.getElementById("dirChart");
+  dw.innerHTML = "";
+  const rows = [
+    { who: "Via de bemiddelaar", pct: a.direct },
+    { who: "Rechtstreeks tussen ouders", pct: 100 - a.direct }
+  ];
+  const W2 = Math.max(280, dw.clientWidth || 420);
+  const svg2 = el("svg", { viewBox: `0 0 ${W2} 84`, width: "100%", role: "img",
+    "aria-label": "Communicatierichting" }, dw);
+  rows.forEach((d, i) => {
+    const y = i * 42 + 4, h = 18;
+    const w = (d.pct / 100) * (W2 - 60);
+    el("path", { d: barPathH(0, y, Math.max(3, w), h, 4), fill: cssVar("--seq-400") }, svg2);
+    el("text", { x: Math.max(3, w) + 8, y: y + h / 2 + 4, "font-size": 12, fill: cssVar("--text-secondary") }, svg2).textContent = d.pct + "%";
+    el("text", { x: 0, y: y + h + 14, "font-size": 12, fill: cssVar("--text-muted") }, svg2).textContent = d.who;
+  });
+  /* matrix */
+  const mw = document.getElementById("matrixWrap");
+  mw.innerHTML = "";
+  const seq = ["--seq-100", "--seq-200", "--seq-300", "--seq-400", "--seq-500", "--seq-600"];
+  const rolesArr = ["A", "B", "M"];
+  const maxV = Math.max(1, ...rolesArr.flatMap(r => rolesArr.map(c => a.matrix[r][c])));
+  let html = "<tr><th></th>" + rolesArr.map(c => `<th scope="col">→ ${esc(a.nameOf(c))}</th>`).join("") + "</tr>";
+  rolesArr.forEach(r => {
+    html += `<tr><th scope="row" class="rowh">${esc(a.nameOf(r))}</th>`;
+    rolesArr.forEach(c => {
+      if (r === c) { html += `<td class="empty">—</td>`; return; }
+      const v = a.matrix[r][c];
+      const stepC = v === 0 ? null : seq[Math.min(seq.length - 1, Math.floor((v / maxV) * (seq.length - 1)))];
+      const bg = stepC ? `background:${cssVar(stepC)};` : "background:transparent;border:1px solid var(--grid);";
+      const dark = stepC && seq.indexOf(stepC) >= 3;
+      html += `<td style="${bg}color:${dark ? "#fff" : "var(--text-primary)"}" title="${esc(a.nameOf(r))} onderbreekt ${esc(a.nameOf(c))}: ${v}×">${v}</td>`;
+    });
+    html += "</tr>";
+  });
+  const tbl = document.createElement("table");
+  tbl.className = "matrix";
+  tbl.innerHTML = html;
+  mw.appendChild(tbl);
+  /* tegels */
+  document.getElementById("signalTiles").innerHTML = `
+    <div class="tile"><div class="label">Momenten van erkenning</div><div class="value">${a.counts.erkenning}</div>
+      <div class="delta">herkend aan waarderende taal</div></div>
+    <div class="tile"><div class="label">Vragen gesteld</div><div class="value">${a.counts.vragen}</div>
+      <div class="delta">door alle deelnemers samen</div></div>
+    <div class="tile"><div class="label">Kindperspectief benoemd</div><div class="value">${a.counts.kind}×</div>
+      <div class="delta">spreekbeurten waarin de kinderen voorkomen</div></div>
+    <div class="tile"><div class="label">Zelfreflectie</div><div class="value">${a.counts.zelfreflectie}×</div>
+      <div class="delta">uitspraken over eigen aandeel</div></div>`;
+}
+
+function renderKantelpunten() {
+  const a = state.analysis;
+  const c = document.getElementById("kpContainer");
+  if (!a.kantelpunten.length) {
+    c.innerHTML = `<p class="lede">Geen duidelijke kantelpunten herkend — de geschatte spanning bleef laag of het gesprek is kort.</p>`;
+    return;
+  }
+  c.innerHTML = a.kantelpunten.map(k => `
+    <article class="kp-card" id="kp-${k.n}">
+      <div class="kp-head">
+        <span class="num">${k.n}</span>
+        <h3>${esc(k.titel)}</h3>
+        <span class="time">${esc(k.tijd)} · thema: ${esc(k.thema)}</span>
+      </div>
+      <div class="fragment">${k.frag.map(f => `<div><span class="spk">${esc(f[0])}:</span> ${esc(f[1])}</div>`).join("")}</div>
+      <div class="chips">${k.sig.map(s => `<span class="chip">${esc(s)}</span>`).join("") || '<span class="chip">geen expliciete taalsignalen</span>'}</div>
+      <div class="kp-grid">
+        <div>
+          <h4>Hypothese (regelgebaseerd)</h4>
+          <p style="margin:2px 0;color:var(--text-secondary)">${esc(k.hypothese)}</p>
+          <div class="conf">
+            <span class="pct">betrouwbaarheid</span>
+            <span class="track"><span class="fill" style="width:${k.betrouwbaarheid}%"></span></span>
+            <span class="pct">${k.betrouwbaarheid}%</span>
+          </div>
+          <h4>Alternatieve verklaringen</h4>
+          <ul>${k.alternatieven.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+        </div>
+        <div>
+          <h4>Interventie in de buurt</h4>
+          <p style="margin:2px 0;color:var(--text-secondary)">${esc(k.interventie)}</p>
+          <h4>Verloop daarna</h4>
+          <p style="margin:2px 0;color:var(--text-secondary)">${esc(k.verloop)}</p>
+          <h4>Reflectievragen</h4>
+          <ul>${k.reflectie.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+        </div>
+      </div>
+    </article>`).join("");
+}
+function flashCard(n) {
+  const card = document.getElementById("kp-" + n);
+  if (!card) return;
+  card.scrollIntoView({ behavior: "smooth", block: "start" });
+  card.classList.add("flash");
+  setTimeout(() => card.classList.remove("flash"), 1800);
+}
+
+function drawAll() {
+  drawTension();
+  drawThemes();
+  drawInteraction();
+  renderKantelpunten();
+}
+
+/* ═══════════════ invoer-afhandeling ═══════════════ */
+const inputError = document.getElementById("inputError");
+function runAnalysis() {
+  const text = document.getElementById("transcriptInput").value;
+  const utt = parseTranscript(text);
+  inputError.hidden = true;
+  if (utt.length < 6) {
+    inputError.textContent = "Er zijn minder dan 6 spreekbeurten herkend. Controleer of iedere regel begint met 'Naam:' gevolgd door de tekst.";
+    inputError.hidden = false;
+    return;
+  }
+  state.utterances = utt;
+  state.roles = guessRoles(utt);
+  renderRoles();
+  reanalyse();
+  document.getElementById("rolesCard").hidden = false;
+  document.getElementById("results").hidden = false;
+  showTab("tijdlijn");
+  document.getElementById("rolesCard").scrollIntoView({ behavior: "smooth" });
+}
+function reanalyse() {
+  state.analysis = analyse(state.utterances, state.roles);
+  drawAll();
+  document.getElementById("aiResult").hidden = true;
+}
+function renderRoles() {
+  const row = document.getElementById("rolesRow");
+  const speakers = [...new Set(state.utterances.map(u => u.speaker))];
+  row.innerHTML = "";
+  for (const sp of speakers) {
+    const label = document.createElement("label");
+    label.innerHTML = `<b>${esc(sp)}</b>`;
+    const sel = document.createElement("select");
+    for (const [val, txt] of [["A", "Ouder A"], ["B", "Ouder B"], ["M", "Bemiddelaar"], ["X", "Overig"]]) {
+      const o = document.createElement("option");
+      o.value = val; o.textContent = txt;
+      if (state.roles[sp] === val) o.selected = true;
+      sel.appendChild(o);
+    }
+    sel.addEventListener("change", () => { state.roles[sp] = sel.value; reanalyse(); });
+    label.appendChild(sel);
+    row.appendChild(label);
+  }
+}
+document.getElementById("analyseBtn").addEventListener("click", runAnalysis);
+document.getElementById("fileInput").addEventListener("change", e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => { document.getElementById("transcriptInput").value = reader.result; runAnalysis(); };
+  reader.readAsText(f);
+});
+window.addEventListener("resize", () => { if (state.analysis) drawAll(); });
+
+/* ═══════════════ voorbeeldgesprek (fictief) ═══════════════ */
+const DEMO = `Bemiddelaar: Welkom terug allebei. Vorige keer spraken we af dat we het vandaag over de vakantieplanning zouden hebben. Waar willen jullie beginnen?
+Sandra: Wat mij betreft bij de zomerweken, want daar moet echt snel duidelijkheid over komen voor mijn werk.
+Jeroen: Prima, al wil ik ook nog iets zeggen over het ophalen op vrijdag, want dat liep vorige week weer niet lekker.
+Bemiddelaar: Dat noteer ik, dan komen we daar zo op terug. Eerst de zomer. Sandra, wat is er voor jou nodig?
+Sandra: Ik moet mijn diensten voor augustus volgende week doorgeven. Als ik niet weet welke weken de kinderen bij mij zijn, kan ik niets plannen.
+Jeroen: Dat snap ik, maar dat geldt voor mij net zo goed. En vorig jaar heb ík uiteindelijk alles opgevangen toen jouw rooster veranderde.
+Sandra: Dat is niet eerlijk, dat was één keer en dat kon ik er ook niets aan doen—
+Jeroen: (onderbreekt) Eén keer? Het is elke keer hetzelfde, Sandra. Altijd moet iedereen zich aanpassen aan jouw werk.
+Sandra: Zie je, dit bedoel ik nou. Jij maakt er meteen weer een verwijt van. Het boeit je niet eens hoe zwaar die diensten zijn.
+Bemiddelaar: Ik wil hier even vertragen. Ik hoor bij jullie allebei iets belangrijks. Jeroen, mag ik jou vragen kort samen te vatten wat Sandra net zei over haar rooster?
+Jeroen: Dat ze volgende week haar diensten moet doorgeven en daarom nu wil weten welke weken de kinderen bij haar zijn.
+Bemiddelaar: Klopt dat, Sandra? En kun jij samenvatten wat Jeroen zei?
+Sandra: Ja, dat klopt. En Jeroen zegt dat hij vorig jaar veel heeft opgevangen en dat hij bang is dat dat weer gebeurt.
+Bemiddelaar: Dank jullie wel. Wat maakt de zomerplanning voor ieder van jullie zo belangrijk?
+Jeroen: Voor mij gaat het om gelijkwaardigheid. Ik wil niet weer degene zijn die alles maar oplost. Ik plan ook dingen met de kinderen.
+Sandra: En voor mij om voorspelbaarheid. Als het rooster eenmaal vaststaat kan ik niets meer ruilen, zo werkt dat in de zorg nu eenmaal.
+Bemiddelaar: Gelijkwaardigheid en voorspelbaarheid. Laten we kijken of een verdeling allebei kan dienen. Wat zou een eerste stap kunnen zijn?
+Sandra: Wat als we de zes weken gewoon om en om verdelen? Dan weet iedereen waar hij aan toe is.
+Jeroen: Daar kan ik in meekomen, als we dan wel afspreken dat ruilen alleen in overleg gaat en niet weer op het laatste moment via een appje.
+Sandra: Dat is een terecht punt, dat ging vorig jaar niet goed van mijn kant. Dat wil ik best toegeven.
+Jeroen: Fijn dat je dat zegt. Goed, om en om dan, en ruilen alleen na overleg.
+Bemiddelaar: Mooi. Ik vat samen: de zomer wordt week om week verdeeld en ruilen kan alleen na onderling overleg. Ik zet het in het verslag. Dan nu de vrijdag, Jeroen?
+Jeroen: Ja. Vorige week stond ik met de meiden om vijf uur bij de sporthal en je was er pas om half zes. Ze stonden daar maar te wachten.
+Sandra: Dat was om half zes afgesproken, niet om vijf uur. Je haalt de tijden door elkaar.
+Jeroen: Nee hoor, ik heb het appje nog. Het is altijd hetzelfde met die overdrachten, nooit ben je op tijd.
+Sandra: NOOIT? Nu overdrijf je echt. Ik sta er elke week gewoon op tijd en die ene keer krijg ik dit naar mijn hoofd.
+Jeroen: Omdat het niet de eerste keer is! En de meiden zijn er de dupe van, dat wil er bij jou maar niet in.
+Bemiddelaar: Ik ga even tussenbeide. Ik zie dat dit onderwerp bij allebei veel losmaakt. Wat merken de meiden er eigenlijk van als een overdracht rommelig verloopt?
+Sandra: Eva vroeg laatst waarom papa zo boos keek bij het wegbrengen. Dat vond ik best pijnlijk om te horen, eerlijk gezegd.
+Jeroen: Dat wist ik niet. Dat wil ik ook helemaal niet. Voor de meiden moet het gewoon rustig zijn, daar zijn we het over eens.
+Bemiddelaar: Dat lijkt me een gedeeld belang: een rustige overdracht voor Eva en Noor. Wat zou daarbij helpen?
+Sandra: Misschien kunnen we een vaste plek afspreken met een marge van een kwartier, dan hoeft niemand op de stoep te wachten.
+Jeroen: En de tijd gewoon in de gedeelde agenda zetten in plaats van losse appjes. Dan is er geen discussie meer over wie wat gezegd heeft.
+Sandra: Prima, dat lijkt me een goed idee. Dan doen we dat voortaan zo.
+Bemiddelaar: Dan hebben we twee afspraken: de zomer week om week met ruilen alleen na overleg, en de overdracht op een vaste plek met de tijden in de gedeelde agenda. Zullen we over drie weken kijken hoe het loopt?
+Jeroen: Goed. En Sandra, de ochtenden met de meiden regel je trouwens altijd goed, dat mag ook wel eens gezegd worden.
+Sandra: Oh. Nou ja, laten we vooral hopen dat die agenda gaat werken. Ik zet de vakantieweken er vanavond meteen in.
+Bemiddelaar: Dan sluit ik af. Ik hoorde vandaag naast de spanning ook veel bereidheid om het voor Eva en Noor goed te regelen. Tot over drie weken.`;
+document.getElementById("demoBtn").addEventListener("click", () => {
+  document.getElementById("transcriptInput").value = DEMO;
+  runAnalysis();
+});
+
+/* ═══════════════ AI-analyse via Claude API ═══════════════ */
+const AI_MODEL = "claude-opus-4-8";
+const aiBtn = document.getElementById("aiBtn");
+const aiError = document.getElementById("aiError");
+const aiStatus = document.getElementById("aiStatus");
+const keyField = document.getElementById("apiKey");
+const rememberKey = document.getElementById("rememberKey");
+try {
+  const saved = localStorage.getItem("gk_api_key");
+  if (saved) { keyField.value = saved; rememberKey.checked = true; }
+} catch (e) { /* localStorage niet beschikbaar */ }
+
+const AI_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["samenvatting", "kantelpunten"],
+  properties: {
+    samenvatting: {
+      type: "object",
+      additionalProperties: false,
+      required: ["onderwerpen", "belangen_ouder_a", "belangen_ouder_b", "overeenkomsten", "geschilpunten", "afspraken", "aandachtspunten_vervolg"],
+      properties: {
+        onderwerpen: { type: "array", items: { type: "string" } },
+        belangen_ouder_a: { type: "array", items: { type: "string" } },
+        belangen_ouder_b: { type: "array", items: { type: "string" } },
+        overeenkomsten: { type: "array", items: { type: "string" } },
+        geschilpunten: { type: "array", items: { type: "string" } },
+        afspraken: { type: "array", items: { type: "string" } },
+        aandachtspunten_vervolg: { type: "array", items: { type: "string" } }
+      }
+    },
+    kantelpunten: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["titel", "moment", "hypothese", "betrouwbaarheid", "alternatieve_verklaringen", "mogelijke_interventies", "reflectievragen"],
+        properties: {
+          titel: { type: "string" },
+          moment: { type: "string" },
+          hypothese: { type: "string" },
+          betrouwbaarheid: { type: "integer" },
+          alternatieve_verklaringen: { type: "array", items: { type: "string" } },
+          mogelijke_interventies: { type: "array", items: { type: "string" } },
+          reflectievragen: { type: "array", items: { type: "string" } }
+        }
+      }
+    }
+  }
+};
+
+const AI_SYSTEM = `Je bent een reflectieassistent voor ouderschapsbemiddelaars, gebaseerd op het onderzoeksvoorstel "Gesprekskompas".
+Je analyseert een transcript van een bemiddelingsgesprek tussen twee ouders en een bemiddelaar.
+
+Strikte uitgangspunten:
+- Je formuleert toetsbare HYPOTHESES over waarneembare gesprekskenmerken, nooit diagnoses, waarheden of oordelen over personen.
+- Je baseert je uitsluitend op wat er letterlijk in het transcript staat; je verzint geen gebeurtenissen of citaten.
+- Je schrijft geen intenties of emoties met zekerheid toe ("hij is boos omdat..."); gebruik formuleringen als "mogelijk", "lijkt", "zou kunnen wijzen op".
+- Bij ieder kantelpunt geef je een betrouwbaarheid (0-100) die past bij hoe expliciet de signalen in de tekst zijn, en minstens één alternatieve verklaring.
+- Spanning is niet hetzelfde als escalatie: intense emotie kan ook betrokkenheid of een belangrijk inzicht zijn.
+- Schrijf alles in helder Nederlands, gericht aan de bemiddelaar (niet aan de ouders).
+- Benoem in aandachtspunten_vervolg ook of het perspectief van de kinderen voldoende aan bod kwam.`;
+
+aiBtn.addEventListener("click", async () => {
+  aiError.hidden = true;
+  const key = keyField.value.trim();
+  if (!state.utterances) {
+    aiError.textContent = "Analyseer eerst een gesprek (stap 1)."; aiError.hidden = false; return;
+  }
+  if (!key || !key.startsWith("sk-ant-")) {
+    aiError.textContent = "Vul een geldige Anthropic API-sleutel in (begint met sk-ant-). Aan te maken op platform.claude.com.";
+    aiError.hidden = false; return;
+  }
+  try {
+    if (rememberKey.checked) localStorage.setItem("gk_api_key", key);
+    else localStorage.removeItem("gk_api_key");
+  } catch (e) { /* ignore */ }
+
+  const a = state.analysis;
+  const transcript = state.utterances.map((u, i) =>
+    `[beurt ${i + 1}] ${u.speaker} (${{ A: "ouder A", B: "ouder B", M: "bemiddelaar", X: "overig" }[a.roleOf(u)]}): ${u.text}`).join("\n");
+  const userMsg = `Hieronder staat het transcript. De regelgebaseerde voorananalyse vond spanningspieken rond de spreekbeurten: ${a.kantelpunten.map(k => k.i + 1).join(", ") || "geen"}.
+Geef 2 tot 4 kantelpunten (mogen dezelfde of andere momenten zijn, verwijs naar beurtnummers in "moment") en een gestructureerde samenvatting.
+
+TRANSCRIPT:
+${transcript}`;
+
+  aiBtn.disabled = true;
+  aiStatus.innerHTML = `<span class="spinner"></span>Claude analyseert het gesprek… (dit kan een minuut duren)`;
+  aiStatus.hidden = false;
+  document.getElementById("aiResult").hidden = true;
+
+  try {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({
+        model: AI_MODEL,
+        max_tokens: 8192,
+        system: AI_SYSTEM,
+        thinking: { type: "adaptive" },
+        output_config: { format: { type: "json_schema", schema: AI_SCHEMA } },
+        messages: [{ role: "user", content: userMsg }]
+      })
+    });
+    if (!resp.ok) {
+      let detail = "";
+      try { detail = (await resp.json()).error?.message || ""; } catch (e) { /* ignore */ }
+      if (resp.status === 401) throw new Error("De API-sleutel is ongeldig of ingetrokken (401).");
+      if (resp.status === 429) throw new Error("Te veel verzoeken of limiet bereikt (429). Probeer het zo weer.");
+      throw new Error(`De API gaf een fout (${resp.status}). ${detail}`);
+    }
+    const data = await resp.json();
+    if (data.stop_reason === "refusal") throw new Error("Het verzoek is door de veiligheidsfilters van het model geweigerd.");
+    const textBlock = (data.content || []).find(b => b.type === "text");
+    if (!textBlock) throw new Error("De API gaf geen tekstuele uitkomst terug.");
+    const result = JSON.parse(textBlock.text);
+    renderAiResult(result);
+    aiStatus.hidden = true;
+  } catch (err) {
+    aiStatus.hidden = true;
+    aiError.textContent = err instanceof TypeError
+      ? "Kon de API niet bereiken. Controleer je internetverbinding (of een adblocker/firewall die api.anthropic.com blokkeert)."
+      : err.message;
+    aiError.hidden = false;
+  } finally {
+    aiBtn.disabled = false;
+  }
+});
+
+function renderAiResult(r) {
+  const a = state.analysis;
+  const list = arr => `<ul>${(arr || []).map(x => `<li>${esc(x)}</li>`).join("") || "<li>—</li>"}</ul>`;
+  document.getElementById("aiSummary").innerHTML = `
+    <div>
+      <h3>Besproken onderwerpen</h3>${list(r.samenvatting.onderwerpen)}
+      <h3>Belangen ${esc(a.nameOf("A"))} (ouder A)</h3>${list(r.samenvatting.belangen_ouder_a)}
+      <h3>Belangen ${esc(a.nameOf("B"))} (ouder B)</h3>${list(r.samenvatting.belangen_ouder_b)}
+      <h3>Overeenkomsten</h3>${list(r.samenvatting.overeenkomsten)}
+    </div>
+    <div>
+      <h3>Gemaakte afspraken</h3>${list(r.samenvatting.afspraken)}
+      <h3>Openstaande geschilpunten</h3>${list(r.samenvatting.geschilpunten)}
+      <h3>Aandachtspunten voor het vervolg</h3>${list(r.samenvatting.aandachtspunten_vervolg)}
+    </div>`;
+  document.getElementById("aiKantelpunten").innerHTML = (r.kantelpunten || []).map((k, i) => `
+    <article class="kp-card">
+      <div class="kp-head">
+        <span class="num">${i + 1}</span>
+        <h3>${esc(k.titel)} <span class="badge-ai">AI</span></h3>
+        <span class="time">${esc(k.moment)}</span>
+      </div>
+      <div class="kp-grid">
+        <div>
+          <h4>Hypothese</h4>
+          <p style="margin:2px 0;color:var(--text-secondary)">${esc(k.hypothese)}</p>
+          <div class="conf">
+            <span class="pct">betrouwbaarheid</span>
+            <span class="track"><span class="fill" style="width:${Math.max(0, Math.min(100, k.betrouwbaarheid))}%"></span></span>
+            <span class="pct">${Math.max(0, Math.min(100, k.betrouwbaarheid))}%</span>
+          </div>
+          <h4>Alternatieve verklaringen</h4>${list(k.alternatieve_verklaringen)}
+        </div>
+        <div>
+          <h4>Mogelijke interventies</h4>${list(k.mogelijke_interventies)}
+          <h4>Reflectievragen</h4>${list(k.reflectievragen)}
+        </div>
+      </div>
+    </article>`).join("");
+  document.getElementById("aiResult").hidden = false;
+}
+
+/* ═══════════════ init ═══════════════ */
+applyTheme(window.matchMedia("(prefers-color-scheme: dark)").matches);
+</script>
+</body>
+</html>
