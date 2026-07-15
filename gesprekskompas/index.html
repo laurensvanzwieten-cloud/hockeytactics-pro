@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gesprekskompas — AI-ondersteunde gespreksanalyse voor ouderschapsbemiddeling</title>
+<meta name="description" content="Onderzoeksconcept en werkend prototype: een AI-ondersteunde reflectietool die ouderschapsbemiddelaars helpt spanning, interactiepatronen en herstelmomenten in gesprekken terug te zien.">
+<style>
+  :root {
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --border:         rgba(11,11,11,0.10);
+    --accent:         #2a78d6;
+    --accent-deep:    #184f95;
+    --warn:           #fab219;
+  }
+  :root.dark {
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --border:         rgba(255,255,255,0.10);
+    --accent:         #3987e5;
+    --accent-deep:    #86b6ef;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 15px; line-height: 1.6; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 28px 22px 64px; }
+  .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 30px; }
+  .topbar .tag { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--accent-deep); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; }
+  .theme-btn { margin-left: auto; border: 1px solid var(--border); background: var(--surface-1);
+    color: var(--text-secondary); border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 10px; letter-spacing: -0.01em; }
+  .lead { font-size: 17.5px; color: var(--text-secondary); margin: 0 0 22px; max-width: 640px; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 8px; }
+  a.btn { display: inline-block; text-decoration: none; font-size: 14.5px; font-weight: 600;
+    border-radius: 10px; padding: 11px 20px; }
+  a.btn.primary { background: var(--text-primary); color: var(--page); }
+  a.btn.ghost { background: var(--surface-1); color: var(--text-secondary); border: 1px solid var(--border); font-weight: 500; }
+  .cta-note { font-size: 12.5px; color: var(--text-muted); margin: 6px 0 0; }
+  h2 { font-size: 20px; margin: 44px 0 12px; }
+  h3 { font-size: 15px; margin: 18px 0 6px; }
+  p { margin: 0 0 12px; color: var(--text-secondary); }
+  p b, li b { color: var(--text-primary); }
+  ul { margin: 0 0 12px; padding-left: 20px; color: var(--text-secondary); }
+  li { margin: 4px 0; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 16px 0; }
+  .cardlink { display: block; text-decoration: none; background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; color: inherit; }
+  .cardlink:hover { border-color: var(--accent); }
+  .cardlink .kop { display: block; font-weight: 700; font-size: 14.5px; margin-bottom: 4px; color: var(--text-primary); }
+  .cardlink .sub { display: block; font-size: 13px; color: var(--text-muted); }
+  .cardlink .go { display: block; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--accent-deep); }
+  .lagen { counter-reset: laag; margin: 14px 0; padding: 0; list-style: none; }
+  .lagen li { counter-increment: laag; display: flex; gap: 14px; padding: 9px 0;
+    border-bottom: 1px solid var(--grid); margin: 0; }
+  .lagen li::before { content: counter(laag); flex: none; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--text-primary); color: var(--page); font-weight: 700; font-size: 13px;
+    display: inline-flex; align-items: center; justify-content: center; margin-top: 2px; }
+  .lagen b { display: block; color: var(--text-primary); }
+  .principes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 14px 0; }
+  .principe { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .principe b { display: block; margin-bottom: 3px; }
+  .principe span { font-size: 13.5px; color: var(--text-secondary); }
+  table.mijlpalen { border-collapse: collapse; width: 100%; font-size: 13.5px; margin: 12px 0; }
+  table.mijlpalen th, table.mijlpalen td { text-align: left; padding: 7px 12px 7px 0;
+    border-bottom: 1px solid var(--grid); color: var(--text-secondary); vertical-align: top; }
+  table.mijlpalen th { color: var(--text-muted); font-weight: 600; font-size: 12.5px; }
+  table.mijlpalen td:first-child { color: var(--text-primary); font-weight: 600; white-space: nowrap; }
+  .zoeken { background: var(--surface-1); border: 1px solid var(--border);
+    border-left: 4px solid var(--accent); border-radius: 12px; padding: 18px 22px; margin: 16px 0; }
+  .zoeken h2 { margin: 0 0 8px; font-size: 18px; }
+  .disclaimer { display: flex; gap: 10px; align-items: flex-start; background: var(--surface-1);
+    border: 1px solid var(--border); border-left: 4px solid var(--warn); border-radius: 10px;
+    padding: 12px 16px; margin: 34px 0 0; font-size: 13px; color: var(--text-secondary); }
+  footer { margin-top: 26px; font-size: 12.5px; color: var(--text-muted); }
+  footer a { color: var(--text-secondary); }
+  @media print {
+    .theme-btn, .no-print { display: none !important; }
+    body { background: #fff; }
+    .cardlink, .principe, .zoeken, .disclaimer { border-color: #ccc; }
+    a { color: inherit; }
+    h2 { break-after: avoid; }
+    .cards, .principes { break-inside: avoid; }
+  }
+  @media (max-width: 640px) { h1 { font-size: 27px; } .wrap { padding: 20px 14px 44px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <span class="tag">Onderzoeksconcept + werkend prototype</span>
+    <button class="theme-btn no-print" id="themeBtn" type="button">🌙 Donker</button>
+  </div>
+
+  <h1>Gesprekskompas</h1>
+  <p class="lead">Een AI-ondersteunde reflectietool die ouderschapsbemiddelaars helpt om ná het gesprek terug te zien wat er <em>tussen</em> ouders gebeurde: waar de spanning opliep, welke patronen terugkeerden, welke interventies werkten en welke toenaderingen bijna onopgemerkt bleven.</p>
+
+  <div class="cta-row no-print">
+    <a class="btn primary" href="app.html">▶ Probeer de demo</a>
+    <a class="btn ghost" href="dashboard-schets.html">Bekijk de dashboardschets</a>
+  </div>
+  <p class="cta-note no-print">De demo draait volledig in de browser met een fictief voorbeeldgesprek — er is niets te installeren en er worden geen gegevens verstuurd.</p>
+
+  <h2>Waarom</h2>
+  <p>Bemiddeling bij complexe scheidingen draait om gespreksprocessen: onderbrekingen, verwijten, terugtrekgedrag, erkenning en herstel. Een bemiddelaar neemt die signalen nu vooral <b>in het moment en op intuïtie</b> waar — en kan ze achteraf nauwelijks systematisch terugzien. Daardoor blijven patronen onopgemerkt: terugkerende escalatie bij hetzelfde onderwerp, toenaderingspogingen die de andere ouder mist, momenten waarop het kind uit beeld verdwijnt.</p>
+  <p>In aangrenzende velden (therapie, motiverende gespreksvoering) wordt AI al gebruikt om gespreksgedrag te coderen. <b>Voor ouderschapsbemiddeling bestaat zo'n geïntegreerd, gevalideerd instrument nog niet.</b> Dat is het gat dat dit project wil onderzoeken.</p>
+
+  <h2>Hoe het werkt — vijf analyselagen</h2>
+  <ol class="lagen">
+    <li><span><b>Gespreksregistratie</b> Opname of transcript van het bemiddelingsgesprek, met toestemming van alle deelnemers.</span></li>
+    <li><span><b>Transcriptie &amp; sprekerherkenning</b> Wie zegt wat, wanneer — corrigeerbaar door de bemiddelaar.</span></li>
+    <li><span><b>Multimodale analyse</b> Taalpatronen (verwijten, generalisaties, erkenning), stemkenmerken en interactie (spreektijd, onderbrekingen, beurtwisseling).</span></li>
+    <li><span><b>Patronen &amp; kantelpunten</b> Alle signalen op één tijdlijn; escalatie- en herstelsequenties worden gemarkeerd.</span></li>
+    <li><span><b>Professionele ondersteuning</b> Hypotheses, alternatieve verklaringen en reflectievragen voor de bemiddelaar — nooit één definitieve interpretatie.</span></li>
+  </ol>
+
+  <h2>Uitgangspunten</h2>
+  <div class="principes">
+    <div class="principe"><b>Hypotheses, geen diagnoses</b><span>Iedere uitkomst is herleidbaar tot een concreet fragment, met betrouwbaarheidsindicatie en alternatieve verklaringen. De AI stelt geen emoties of intenties vast.</span></div>
+    <div class="principe"><b>De bemiddelaar blijft verantwoordelijk</b><span>De tool ondersteunt reflectie, supervisie en intervisie. Betekenisgeving en besluitvorming blijven mensenwerk.</span></div>
+    <div class="principe"><b>Eerst achteraf, niet live</b><span>De eerste versies analyseren ná het gesprek, zodat de bemiddelaar in het gesprek zelf niet wordt afgeleid.</span></div>
+    <div class="principe"><b>Spanning ≠ escalatie</b><span>Intense emotie kan ook betrokkenheid of een doorbraak zijn. De tool markeert veranderingen, geen oordelen.</span></div>
+  </div>
+
+  <h2>Wat er nu al staat</h2>
+  <div class="cards">
+    <a class="cardlink" href="https://github.com/laurensvanzwieten-cloud/hockeytactics-pro/blob/main/gesprekskompas/onderzoeksvoorstel.md">
+      <span class="kop">📄 Onderzoeksvoorstel</span>
+      <span class="sub">Volledig voorstel: probleemstelling, 19 deelvragen, 7 werkpakketten, hypothesen en risico's.</span>
+      <span class="go">Lees het voorstel →</span>
+    </a>
+    <a class="cardlink" href="https://github.com/laurensvanzwieten-cloud/hockeytactics-pro/blob/main/gesprekskompas/projectplan.md">
+      <span class="kop">🗺 Compact projectplan</span>
+      <span class="sub">±5 pagina's: aanpak, mijlpalen met go/no-go-momenten, partnertypen en begrotingsposten.</span>
+      <span class="go">Bekijk het plan →</span>
+    </a>
+    <a class="cardlink" href="dashboard-schets.html">
+      <span class="kop">🎛 Dashboardschets</span>
+      <span class="sub">Interactieve schets van de beoogde analyseomgeving, gevuld met fictieve voorbeelddata.</span>
+      <span class="go">Open de schets →</span>
+    </a>
+    <a class="cardlink" href="app.html">
+      <span class="kop">⚡ Werkend prototype</span>
+      <span class="sub">Plak een transcript en het dashboard vult zichzelf: tijdlijn, thema's, kantelpunten, verslag en verloop over gesprekken. Optioneel met AI-verdieping.</span>
+      <span class="go">Start de demo →</span>
+    </a>
+  </div>
+  <p>Het prototype gebruikt bewust <b>eenvoudige, transparante taalregels</b> (model A/C uit werkpakket 4 van het voorstel). Het laat zien wat het instrument kan worden — het is géén gevalideerd meetinstrument. Precies dat valideren is waar het onderzoek voor nodig is.</p>
+
+  <h2>Beoogde route</h2>
+  <table class="mijlpalen">
+    <tr><th>Fase</th><th>Duur</th><th>Resultaat</th></tr>
+    <tr><td>1. Verkenning</td><td>±2 mnd</td><td>Kennisoverzicht, functionele eisen, ontwerp codeboek</td></tr>
+    <tr><td>2. Codeboek &amp; data</td><td>±3 mnd</td><td>Geannoteerde oefengesprekken, gemeten beoordelaarsovereenstemming</td></tr>
+    <tr><td>3. Proof of concept</td><td>±3 mnd</td><td>Technische pipeline; vergelijking tekst-, audio- en interactiemodellen</td></tr>
+    <tr><td>4. Prototype</td><td>±2–3 mnd</td><td>Bruikbare analyseomgeving, getoetst met bemiddelaars</td></tr>
+    <tr><td>5. Praktijkpilot</td><td>±3–6 mnd</td><td>Gebruik in de praktijk, vergelijking met deskundige observaties</td></tr>
+    <tr><td>6. Effectstudie</td><td>vervolg</td><td>Effect op professionele vaardigheden en bemiddelingsresultaten</td></tr>
+  </table>
+
+  <div class="zoeken">
+    <h2>Wat we zoeken</h2>
+    <ul>
+      <li><b>Praktijkpartner</b> — een jeugdhulp- of mediationorganisatie met ervaren ouderschapsbemiddelaars die willen meedenken en oefenen.</li>
+      <li><b>Kennispartner</b> — een hogeschool-lectoraat of universitaire vakgroep voor methodologie, codeboekontwikkeling en (studenten)onderzoek.</li>
+      <li><b>AI/NLP-partner</b> — voor spraaktechnologie en de doorontwikkeling van de analysemodellen.</li>
+      <li><b>Financiering</b> — bijvoorbeeld via een praktijkgericht onderzoeksprogramma of innovatiebudget in de jeugdhulp.</li>
+    </ul>
+    <p style="margin:6px 0 0">Interesse of vragen? Neem contact op via: <b>[naam invullen]</b> · <b>[e-mailadres invullen]</b></p>
+  </div>
+
+  <div class="disclaimer">
+    <span aria-hidden="true">⚠️</span>
+    <span><b>Let op:</b> alle namen, gesprekken en cijfers in de demo en de schets zijn fictief. Het prototype is een onderzoeksdemonstrator; gebruik geen opnames of transcripten van echte gesprekken zonder uitdrukkelijke toestemming van alle deelnemers.</span>
+  </div>
+
+  <footer>
+    Gesprekskompas · onderzoeksconcept voor AI-ondersteunde gespreksanalyse bij ouderschapsbemiddeling ·
+    <a href="https://github.com/laurensvanzwieten-cloud/hockeytactics-pro/tree/main/gesprekskompas">alle documenten op GitHub</a> ·
+    deze pagina is ook geschikt om af te drukken of als PDF te delen (Ctrl/Cmd+P).
+  </footer>
+</div>
+
+<script>
+"use strict";
+const rootEl = document.documentElement;
+const themeBtn = document.getElementById("themeBtn");
+function applyTheme(dark) {
+  rootEl.classList.toggle("dark", dark);
+  themeBtn.textContent = dark ? "☀️ Licht" : "🌙 Donker";
+}
+themeBtn.addEventListener("click", () => applyTheme(!rootEl.classList.contains("dark")));
+applyTheme(window.matchMedia("(prefers-color-scheme: dark)").matches);
+</script>
+</body>
+</html>
