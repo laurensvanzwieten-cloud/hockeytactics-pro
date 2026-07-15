@@ -147,6 +147,19 @@
   footer.foot { color: var(--text-muted); font-size: 12.5px; margin-top: 26px; }
   footer.foot a { color: var(--text-secondary); }
   @media (max-width: 640px) { .wrap { padding: 14px 12px 40px; } .card { padding: 14px; } }
+  .sessies { margin-top: 18px; }
+  .sessies .rij { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+    padding: 7px 0; border-bottom: 1px solid var(--grid); font-size: 13px; color: var(--text-secondary); }
+  .sessies .rij b { color: var(--text-primary); }
+  .sessies .rij button { margin-left: auto; font: inherit; font-size: 12px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-muted); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+  @media print {
+    .disclaimer, header.top, #inputCard, #rolesCard, nav.tabs, footer.foot, .no-print { display: none !important; }
+    section.panel { display: none !important; }
+    section.panel.print-target { display: block !important; }
+    .card { border: none; padding: 0; }
+    body { background: #fff; color: #000; }
+  }
 </style>
 </head>
 <body>
@@ -209,7 +222,9 @@ Tips:
       <button role="tab" aria-selected="false" data-tab="thema">Themakaart</button>
       <button role="tab" aria-selected="false" data-tab="interactie">Interactiekaart</button>
       <button role="tab" aria-selected="false" data-tab="kantelpunten">Kantelpunten</button>
+      <button role="tab" aria-selected="false" data-tab="verslag">Verslag</button>
       <button role="tab" aria-selected="false" data-tab="ai">AI-analyse</button>
+      <button role="tab" aria-selected="false" data-tab="verloop">Verloop over gesprekken</button>
     </nav>
 
     <section class="panel active" id="panel-tijdlijn">
@@ -260,6 +275,17 @@ Tips:
       </div>
     </section>
 
+    <section class="panel" id="panel-verslag">
+      <div class="card" id="verslagCard">
+        <h2>Gespreksverslag (concept)</h2>
+        <p class="lede">Automatisch samengesteld uit het transcript; ieder punt verwijst naar een spreekbeurt zodat het controleerbaar blijft. Bedoeld als startpunt voor het eigen verslag van de bemiddelaar — controleer en corrigeer voor gebruik.</p>
+        <div class="btnrow no-print" style="margin:0 0 12px">
+          <button class="ghost" id="printBtn" type="button">🖨 Afdrukken / opslaan als PDF</button>
+        </div>
+        <div id="verslagContent"></div>
+      </div>
+    </section>
+
     <section class="panel" id="panel-ai">
       <div class="card">
         <h2>AI-analyse <span class="badge-ai">optioneel</span></h2>
@@ -281,6 +307,18 @@ Tips:
           <h3>Kantelpunten volgens de AI <span class="badge-ai">AI</span></h3>
           <div id="aiKantelpunten"></div>
         </div>
+      </div>
+    </section>
+    <section class="panel" id="panel-verloop">
+      <div class="card">
+        <h2>Verloop over meerdere gesprekken</h2>
+        <p class="lede">Bewaar de analyse van ieder gesprek en volg de ontwikkeling: nemen onderbrekingen af, groeit de erkenning, blijft het kindperspectief in beeld? De gegevens worden alleen in deze browser opgeslagen (localStorage). Let op: de tellingen zijn absolute aantallen per gesprek — een kort en een lang gesprek zijn dus niet één-op-één vergelijkbaar.</p>
+        <div class="btnrow" style="margin:0 0 14px">
+          <input class="keyfield" style="max-width:260px" type="text" id="sessionName" placeholder="Naam, bijv. 'Gesprek 3 — 12 mei'">
+          <button class="primary" id="saveSessionBtn" type="button">Bewaar huidige analyse</button>
+        </div>
+        <div class="error" id="verloopError" hidden></div>
+        <div id="verloopContent"></div>
       </div>
     </section>
   </div>
@@ -886,11 +924,164 @@ function flashCard(n) {
   setTimeout(() => card.classList.remove("flash"), 1800);
 }
 
+/* ═══════════════ gespreksverslag ═══════════════ */
+function renderVerslag() {
+  const a = state.analysis;
+  const c = document.getElementById("verslagContent");
+  const quote = (i, max = 110) => {
+    const u = state.utterances[i];
+    const t = u.text.length > max ? u.text.slice(0, max - 1) + "…" : u.text;
+    return `<li>“${esc(t)}” <span style="color:var(--text-muted)">— ${esc(u.speaker)}, beurt ${i + 1}</span></li>`;
+  };
+  const afspraakRe = /\b(spreken we af|afgesproken|dan doen we (dat|het)|prima, dat|akkoord|deal|dat is de afspraak|zetten? we? (het )?in (het verslag|de agenda)|om en om|voortaan)\b/i;
+  const afspraken = [], erkenningen = [], kindQ = [];
+  a.feats.forEach((f, i) => {
+    if (f.sig.includes("toekomst") && afspraakRe.test(state.utterances[i].text) && afspraken.length < 6) afspraken.push(i);
+    const r = a.roleOf(state.utterances[i]);
+    if (f.sig.includes("erkenning") && (r === "A" || r === "B") && erkenningen.length < 5) erkenningen.push(i);
+    if (f.sig.includes("kind") && kindQ.length < 4) kindQ.push(i);
+  });
+  const terugkerend = a.themes.filter(t => t.status === "terugkerend").map(t => t.naam);
+  const toenaderingen = a.kantelpunten.filter(k => k.titel.includes("toenadering"));
+  const totInterrupts = ["A", "B", "M"].reduce((s, r) => s + ["A", "B", "M"].reduce((t, c2) => t + a.matrix[r][c2], 0), 0);
+  const aandacht = [];
+  if (terugkerend.length) aandacht.push(`Thema('s) die terugkeerden zonder herkenbaar besluit: ${terugkerend.join(", ")} — mogelijk agenderen voor een vervolg.`);
+  toenaderingen.forEach(k => aandacht.push(`Mogelijke gemiste toenadering rond spreekbeurt ${k.i + 1} (zie kantelpuntkaart ${k.n}).`));
+  if (totInterrupts >= 3) aandacht.push(`Er zijn ${totInterrupts} onderbrekingen herkend — beurtstructuur kan aandacht vragen.`);
+  if (a.counts.kind === 0) aandacht.push("Het perspectief van de kinderen kwam in dit transcript niet herkenbaar aan bod.");
+  if (!aandacht.length) aandacht.push("Geen bijzondere aandachtspunten uit de regelgebaseerde analyse.");
+  const list = items => items.length ? `<ul>${items.join("")}</ul>` : `<ul><li style="color:var(--text-muted)">geen herkend</li></ul>`;
+  c.innerHTML = `
+    <div class="summary-grid">
+      <div>
+        <h3>Deelnemers</h3>
+        <ul><li>${esc(a.nameOf("A"))} (ouder A)</li><li>${esc(a.nameOf("B"))} (ouder B)</li><li>${esc(a.nameOf("M"))} (bemiddelaar)</li></ul>
+        <h3>Besproken thema's</h3>
+        <ul>${a.themes.slice(0, 6).map(t => `<li>${esc(t.naam)} (${t.aandeel}% van het gesprek)</li>`).join("")}</ul>
+        <h3>Mogelijke afspraken</h3>
+        ${list(afspraken.map(i => quote(i, 140)))}
+      </div>
+      <div>
+        <h3>Momenten van erkenning</h3>
+        ${list(erkenningen.map(i => quote(i)))}
+        <h3>Kindperspectief</h3>
+        ${list(kindQ.map(i => quote(i)))}
+        <h3>Aandachtspunten voor een vervolggesprek</h3>
+        <ul>${aandacht.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+      </div>
+    </div>
+    <p class="lede" style="margin-top:14px">Automatisch gegenereerd concept op basis van taalregels (${a.n} spreekbeurten) — gecontroleerd en vastgesteld door: ________________</p>`;
+}
+document.getElementById("printBtn").addEventListener("click", () => {
+  const p = document.getElementById("panel-verslag");
+  p.classList.add("print-target");
+  window.print();
+  p.classList.remove("print-target");
+});
+
+/* ═══════════════ verloop over gesprekken (localStorage) ═══════════════ */
+const LS_SESSIONS = "gk_sessies";
+function loadSessions() {
+  try { return JSON.parse(localStorage.getItem(LS_SESSIONS)) || []; }
+  catch (e) { return []; }
+}
+function saveSessions(list) {
+  try { localStorage.setItem(LS_SESSIONS, JSON.stringify(list)); } catch (e) { /* vol of geblokkeerd */ }
+}
+function currentMetrics() {
+  const a = state.analysis;
+  const G = a.series.map(s => s.G);
+  const interrupts = ["A", "B", "M"].reduce((s, r) => s + ["A", "B", "M"].reduce((t, c) => t + a.matrix[r][c], 0), 0);
+  const totalTalk = a.talk.A + a.talk.B || 1;
+  const toekomst = a.feats.filter(f => f.sig.includes("toekomst")).length;
+  return {
+    beurten: a.n,
+    gemSpanning: Math.round(G.reduce((s, v) => s + v, 0) / G.length),
+    piekSpanning: Math.max(...G),
+    onderbrekingen: interrupts,
+    erkenning: a.counts.erkenning,
+    kind: a.counts.kind,
+    toekomst,
+    balans: Math.abs(Math.round(100 * a.talk.A / totalTalk) - Math.round(100 * a.talk.B / totalTalk))
+  };
+}
+document.getElementById("saveSessionBtn").addEventListener("click", () => {
+  const err = document.getElementById("verloopError");
+  err.hidden = true;
+  if (!state.analysis) { err.textContent = "Analyseer eerst een gesprek."; err.hidden = false; return; }
+  const list = loadSessions();
+  const naam = document.getElementById("sessionName").value.trim() || `Gesprek ${list.length + 1}`;
+  list.push({ t: Date.now(), naam, m: currentMetrics() });
+  saveSessions(list);
+  document.getElementById("sessionName").value = "";
+  renderVerloop();
+});
+const VERLOOP_METRICS = [
+  { key: "onderbrekingen", label: "Onderbrekingen", goodDown: true, unit: "" },
+  { key: "gemSpanning",    label: "Gem. spanningsindex", goodDown: true, unit: "" },
+  { key: "erkenning",      label: "Momenten van erkenning", goodDown: false, unit: "" },
+  { key: "kind",           label: "Kindperspectief benoemd", goodDown: false, unit: "×" },
+  { key: "toekomst",       label: "Toekomstgerichte uitspraken", goodDown: false, unit: "" },
+  { key: "balans",         label: "Verschil in spreektijd ouders", goodDown: true, unit: " pt" }
+];
+function renderVerloop() {
+  const c = document.getElementById("verloopContent");
+  const list = loadSessions();
+  if (!list.length) {
+    c.innerHTML = `<p class="lede">Nog geen bewaarde gesprekken. Analyseer een gesprek en klik op “Bewaar huidige analyse”; vanaf twee bewaarde gesprekken verschijnen hier trendlijnen.</p>`;
+    return;
+  }
+  let html = `<div class="tiles">`;
+  for (const mtr of VERLOOP_METRICS) {
+    const vals = list.map(s => s.m[mtr.key] ?? 0);
+    const last = vals[vals.length - 1], first = vals[0];
+    const diff = last - first;
+    const good = mtr.goodDown ? diff < 0 : diff > 0;
+    const deltaTxt = list.length < 2 ? "bewaar meer gesprekken voor een trend"
+      : `${diff > 0 ? "+" : diff < 0 ? "−" : "±"}${Math.abs(diff)}${mtr.unit} t.o.v. eerste gesprek${good ? " · gunstig" : ""}`;
+    html += `<div class="tile"><div class="label">${mtr.label}</div>
+      <div class="value">${last}${mtr.unit}</div>
+      <div class="delta ${good && list.length > 1 ? "good" : ""}">${deltaTxt}</div>
+      <div class="spark" data-key="${mtr.key}"></div>
+      <div class="label">${list.length} gesprek${list.length === 1 ? "" : "ken"}</div></div>`;
+  }
+  html += `</div><div class="sessies">` + list.map((s, i) => `
+    <div class="rij"><b>${esc(s.naam)}</b>
+      <span>${new Date(s.t).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" })}</span>
+      <span>${s.m.beurten} beurten · spanning ${s.m.gemSpanning} · ${s.m.onderbrekingen} onderbrekingen</span>
+      <button type="button" data-del="${i}">verwijder</button></div>`).join("") + `</div>`;
+  c.innerHTML = html;
+  /* sparklines */
+  if (list.length >= 2) {
+    c.querySelectorAll(".spark").forEach(sp => {
+      const vals = list.map(s => s.m[sp.dataset.key] ?? 0);
+      const W = 170, H = 36, pad = 5;
+      const min = Math.min(...vals), max = Math.max(...vals);
+      const X = i => pad + (i / (vals.length - 1)) * (W - 2 * pad);
+      const Y = v => pad + (1 - (v - min) / (max - min || 1)) * (H - 2 * pad);
+      const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H });
+      el("polyline", { points: vals.map((v, i) => `${X(i)},${Y(v)}`).join(" "), fill: "none",
+        stroke: cssVar("--axis"), "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+      el("circle", { cx: X(vals.length - 1), cy: Y(vals[vals.length - 1]), r: 4,
+        fill: cssVar("--seq-500"), stroke: cssVar("--surface-1"), "stroke-width": 2 }, svg);
+      sp.appendChild(svg);
+    });
+  }
+  c.querySelectorAll("button[data-del]").forEach(b => b.addEventListener("click", () => {
+    const l = loadSessions();
+    l.splice(Number(b.dataset.del), 1);
+    saveSessions(l);
+    renderVerloop();
+  }));
+}
+
 function drawAll() {
   drawTension();
   drawThemes();
   drawInteraction();
   renderKantelpunten();
+  renderVerslag();
+  renderVerloop();
 }
 
 /* ═══════════════ invoer-afhandeling ═══════════════ */
