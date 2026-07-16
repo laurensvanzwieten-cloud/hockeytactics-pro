@@ -61,10 +61,16 @@
   textarea { width: 100%; min-height: 180px; resize: vertical; font: 13px/1.5 ui-monospace, "SF Mono", Consolas, monospace;
     background: var(--page); color: var(--text-primary); border: 1px solid var(--axis); border-radius: 8px; padding: 10px 12px; }
   .btnrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
-  button.primary, button.ghost, label.filebtn {
+  button.primary, button.ghost, label.filebtn, a.filebtn {
     font: inherit; font-size: 13.5px; border-radius: 8px; padding: 8px 16px; cursor: pointer; }
   button.primary { background: var(--text-primary); color: var(--page); border: 1px solid var(--text-primary); font-weight: 600; }
-  button.ghost, label.filebtn { background: var(--surface-1); color: var(--text-secondary); border: 1px solid var(--border); }
+  button.ghost, label.filebtn, a.filebtn { background: var(--surface-1); color: var(--text-secondary);
+    border: 1px solid var(--border); text-decoration: none; display: inline-block; }
+  .engine-row { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 4px 0 14px; }
+  .engine-row label { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px;
+    color: var(--text-secondary); cursor: pointer; }
+  .ai-text-result { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+    font-size: 13.5px; color: var(--text-secondary); white-space: pre-wrap; }
   input[type=file] { display: none; }
   details.help { margin-top: 12px; }
   details.help summary { cursor: pointer; color: var(--text-muted); font-size: 12.5px; }
@@ -188,7 +194,9 @@
       <button class="primary" id="analyseBtn" type="button">Analyseer gesprek</button>
       <button class="ghost" id="demoBtn" type="button">Laad voorbeeldgesprek (fictief)</button>
       <label class="filebtn">Bestand uploaden (.txt)<input type="file" id="fileInput" accept=".txt,.md,text/plain"></label>
+      <a class="filebtn" href="app.html" download="gesprekskompas.html">💾 Download voor offline gebruik</a>
     </div>
+    <p class="ai-note" style="margin-top:8px">De app is één bestand zonder installatie: download het, bewaar het waar je wilt en open het later met een dubbelklik — de volledige analyse werkt dan ook zonder internet. De AI-verdieping kan offline via een lokaal model (zie de AI-tab).</p>
     <div class="error" id="inputError" hidden></div>
     <details class="help">
       <summary>Welk formaat moet het transcript hebben?</summary>
@@ -289,14 +297,49 @@ Tips:
     <section class="panel" id="panel-ai">
       <div class="card">
         <h2>AI-analyse <span class="badge-ai">optioneel</span></h2>
-        <p class="lede">Laat Claude (Anthropic) een verdiepende analyse maken: gesprekssamenvatting, hypotheses per kantelpunt en reflectievragen. Hiervoor is een eigen Anthropic API-sleutel nodig.</p>
-        <p class="ai-note">⚠️ Privacy: als je dit gebruikt wordt het transcript naar de API van Anthropic gestuurd. Doe dit niet met echte gesprekken zonder toestemming van alle deelnemers. Kosten zijn voor je eigen API-account.</p>
-        <label style="display:block;font-size:12.5px;color:var(--text-muted);margin-bottom:4px" for="apiKey">Anthropic API-sleutel (begint met <code>sk-ant-</code>)</label>
-        <input class="keyfield" type="password" id="apiKey" placeholder="sk-ant-api03-…" autocomplete="off">
-        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);margin:8px 0">
-          <input type="checkbox" id="rememberKey"> Sleutel onthouden in deze browser (localStorage)
-        </label>
-        <div class="btnrow">
+        <p class="lede">Laat een taalmodel een verdiepende analyse maken: gesprekssamenvatting, hypotheses per kantelpunt en reflectievragen. Kies tussen Claude (via internet, eigen API-sleutel) of een lokaal model op je eigen computer (volledig offline, het transcript verlaat je computer niet).</p>
+        <div class="engine-row" role="radiogroup" aria-label="AI-motor">
+          <label><input type="radio" name="engine" value="claude" checked> Claude (Anthropic, cloud)</label>
+          <label><input type="radio" name="engine" value="local"> Lokaal model (Ollama / LM Studio, offline)</label>
+        </div>
+        <div id="cfgClaude">
+          <p class="ai-note">⚠️ Privacy: hierbij wordt het transcript naar de API van Anthropic gestuurd. Doe dit niet met echte gesprekken zonder toestemming van alle deelnemers. Kosten zijn voor je eigen API-account.</p>
+          <label style="display:block;font-size:12.5px;color:var(--text-muted);margin-bottom:4px" for="apiKey">Anthropic API-sleutel (begint met <code>sk-ant-</code>)</label>
+          <input class="keyfield" type="password" id="apiKey" placeholder="sk-ant-api03-…" autocomplete="off">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);margin:8px 0">
+            <input type="checkbox" id="rememberKey"> Sleutel onthouden in deze browser (localStorage)
+          </label>
+        </div>
+        <div id="cfgLocal" hidden>
+          <p class="ai-note">🔒 Volledig lokaal: het transcript gaat alleen naar het model op je eigen computer. Kwaliteit hangt af van het gekozen model; kleine modellen geven eenvoudigere analyses dan Claude.</p>
+          <label style="display:block;font-size:12.5px;color:var(--text-muted);margin-bottom:4px" for="localUrl">Endpoint (OpenAI-compatibel)</label>
+          <input class="keyfield" type="text" id="localUrl" value="http://localhost:11434/v1/chat/completions" autocomplete="off">
+          <label style="display:block;font-size:12.5px;color:var(--text-muted);margin:10px 0 4px" for="localModel">Modelnaam</label>
+          <input class="keyfield" type="text" id="localModel" placeholder="bijv. qwen2.5:7b of llama3.1:8b" autocomplete="off">
+          <details class="help" style="margin-top:10px">
+            <summary>Hoe zet ik een lokaal model op? (Ollama of LM Studio)</summary>
+            <pre>Optie A — Ollama (gratis, ollama.com):
+  1. Installeer Ollama en haal een model op, bijv.:
+       ollama pull qwen2.5:7b
+  2. Sta de browser toe om Ollama te bereiken. Start Ollama met:
+       OLLAMA_ORIGINS="*" ollama serve
+     (Windows: zet de omgevingsvariabele OLLAMA_ORIGINS op * en
+      herstart Ollama)
+  3. Laat het endpoint op http://localhost:11434/v1/chat/completions
+     staan en vul als modelnaam in: qwen2.5:7b
+
+Optie B — LM Studio (lmstudio.ai):
+  1. Download een model en start de lokale server (tabblad "Developer"),
+     zet daar "Enable CORS" aan.
+  2. Endpoint: http://localhost:1234/v1/chat/completions
+  3. Modelnaam: de naam die LM Studio toont bij het geladen model.
+
+Tip: richtlijn is een model van 7B of groter voor bruikbare analyses.
+Deze app werkt met ieder programma dat een OpenAI-compatibele
+chat-API aanbiedt op je eigen computer.</pre>
+          </details>
+        </div>
+        <div class="btnrow" style="margin-top:12px">
           <button class="primary" id="aiBtn" type="button">AI-analyse uitvoeren</button>
         </div>
         <div class="error" id="aiError" hidden></div>
@@ -1194,6 +1237,23 @@ try {
   if (saved) { keyField.value = saved; rememberKey.checked = true; }
 } catch (e) { /* localStorage niet beschikbaar */ }
 
+/* motorkeuze: Claude (cloud) of lokaal model (offline) */
+const cfgClaude = document.getElementById("cfgClaude");
+const cfgLocal = document.getElementById("cfgLocal");
+const localUrl = document.getElementById("localUrl");
+const localModel = document.getElementById("localModel");
+try {
+  const lu = localStorage.getItem("gk_local_url"); if (lu) localUrl.value = lu;
+  const lm = localStorage.getItem("gk_local_model"); if (lm) localModel.value = lm;
+} catch (e) { /* ignore */ }
+function currentEngine() {
+  return document.querySelector('input[name="engine"]:checked').value;
+}
+document.querySelectorAll('input[name="engine"]').forEach(r => r.addEventListener("change", () => {
+  cfgClaude.hidden = currentEngine() !== "claude";
+  cfgLocal.hidden = currentEngine() !== "local";
+}));
+
 const AI_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -1245,21 +1305,109 @@ Strikte uitgangspunten:
 - Schrijf alles in helder Nederlands, gericht aan de bemiddelaar (niet aan de ouders).
 - Benoem in aandachtspunten_vervolg ook of het perspectief van de kinderen voldoende aan bod kwam.`;
 
-aiBtn.addEventListener("click", async () => {
-  aiError.hidden = true;
+const AI_JSON_INSTRUCTIE = `
+
+Antwoord UITSLUITEND met geldig JSON — geen uitleg ervoor of erna, geen markdown — in exact deze structuur:
+{"samenvatting":{"onderwerpen":["…"],"belangen_ouder_a":["…"],"belangen_ouder_b":["…"],"overeenkomsten":["…"],"geschilpunten":["…"],"afspraken":["…"],"aandachtspunten_vervolg":["…"]},"kantelpunten":[{"titel":"…","moment":"beurt …","hypothese":"…","betrouwbaarheid":60,"alternatieve_verklaringen":["…"],"mogelijke_interventies":["…"],"reflectievragen":["…"]}]}`;
+
+function extractJson(text) {
+  let t = String(text).trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) t = fence[1].trim();
+  const s = t.indexOf("{"), e = t.lastIndexOf("}");
+  if (s >= 0 && e > s) t = t.slice(s, e + 1);
+  return JSON.parse(t);
+}
+
+async function callClaude(userMsg) {
   const key = keyField.value.trim();
-  if (!state.utterances) {
-    aiError.textContent = "Analyseer eerst een gesprek (stap 1)."; aiError.hidden = false; return;
-  }
   if (!key || !key.startsWith("sk-ant-")) {
-    aiError.textContent = "Vul een geldige Anthropic API-sleutel in (begint met sk-ant-). Aan te maken op platform.claude.com.";
-    aiError.hidden = false; return;
+    throw new Error("Vul een geldige Anthropic API-sleutel in (begint met sk-ant-). Aan te maken op platform.claude.com.");
   }
   try {
     if (rememberKey.checked) localStorage.setItem("gk_api_key", key);
     else localStorage.removeItem("gk_api_key");
   } catch (e) { /* ignore */ }
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify({
+      model: AI_MODEL,
+      max_tokens: 8192,
+      system: AI_SYSTEM,
+      thinking: { type: "adaptive" },
+      output_config: { format: { type: "json_schema", schema: AI_SCHEMA } },
+      messages: [{ role: "user", content: userMsg }]
+    })
+  }).catch(() => {
+    throw new Error("Kon api.anthropic.com niet bereiken. Controleer je internetverbinding (of een adblocker/firewall). Geen internet? Kies dan het lokale model.");
+  });
+  if (!resp.ok) {
+    let detail = "";
+    try { detail = (await resp.json()).error?.message || ""; } catch (e) { /* ignore */ }
+    if (resp.status === 401) throw new Error("De API-sleutel is ongeldig of ingetrokken (401).");
+    if (resp.status === 429) throw new Error("Te veel verzoeken of limiet bereikt (429). Probeer het zo weer.");
+    throw new Error(`De API gaf een fout (${resp.status}). ${detail}`);
+  }
+  const data = await resp.json();
+  if (data.stop_reason === "refusal") throw new Error("Het verzoek is door de veiligheidsfilters van het model geweigerd.");
+  const textBlock = (data.content || []).find(b => b.type === "text");
+  if (!textBlock) throw new Error("De API gaf geen tekstuele uitkomst terug.");
+  return { result: JSON.parse(textBlock.text) };
+}
 
+async function callLocal(userMsg) {
+  const url = localUrl.value.trim();
+  const model = localModel.value.trim();
+  if (!url) throw new Error("Vul het endpoint van je lokale model in (bijv. http://localhost:11434/v1/chat/completions).");
+  if (!model) throw new Error("Vul de modelnaam in (bijv. qwen2.5:7b). Zie de uitleg onder 'Hoe zet ik een lokaal model op?'.");
+  try {
+    localStorage.setItem("gk_local_url", url);
+    localStorage.setItem("gk_local_model", model);
+  } catch (e) { /* ignore */ }
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      model,
+      stream: false,
+      messages: [
+        { role: "system", content: AI_SYSTEM + AI_JSON_INSTRUCTIE },
+        { role: "user", content: userMsg }
+      ]
+    })
+  }).catch(() => {
+    throw new Error("Kon het lokale model niet bereiken. Draait Ollama of LM Studio? Bij Ollama: start met OLLAMA_ORIGINS=\"*\" (zie de uitleg hieronder); bij LM Studio: zet 'Enable CORS' aan bij de lokale server.");
+  });
+  if (!resp.ok) {
+    let detail = "";
+    try { detail = JSON.stringify(await resp.json()).slice(0, 200); } catch (e) { /* ignore */ }
+    if (resp.status === 404) throw new Error(`Model of endpoint niet gevonden (404). Controleer de modelnaam (bij Ollama: 'ollama list' toont de namen). ${detail}`);
+    throw new Error(`Het lokale model gaf een fout (${resp.status}). ${detail}`);
+  }
+  const data = await resp.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error("Het lokale model gaf geen tekstuele uitkomst terug.");
+  try {
+    const result = extractJson(text);
+    if (result && result.samenvatting && Array.isArray(result.kantelpunten)) return { result };
+    return { rawText: text };
+  } catch (e) {
+    return { rawText: text };
+  }
+}
+
+aiBtn.addEventListener("click", async () => {
+  aiError.hidden = true;
+  if (!state.utterances) {
+    aiError.textContent = "Analyseer eerst een gesprek (stap 1)."; aiError.hidden = false; return;
+  }
+  const engine = currentEngine();
   const a = state.analysis;
   const transcript = state.utterances.map((u, i) =>
     `[beurt ${i + 1}] ${u.speaker} (${{ A: "ouder A", B: "ouder B", M: "bemiddelaar", X: "overig" }[a.roleOf(u)]}): ${u.text}`).join("\n");
@@ -1270,52 +1418,31 @@ TRANSCRIPT:
 ${transcript}`;
 
   aiBtn.disabled = true;
-  aiStatus.innerHTML = `<span class="spinner"></span>Claude analyseert het gesprek… (dit kan een minuut duren)`;
+  aiStatus.innerHTML = `<span class="spinner"></span>${engine === "claude" ? "Claude" : "Het lokale model"} analyseert het gesprek… (dit kan even duren)`;
   aiStatus.hidden = false;
   document.getElementById("aiResult").hidden = true;
 
   try {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true"
-      },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        max_tokens: 8192,
-        system: AI_SYSTEM,
-        thinking: { type: "adaptive" },
-        output_config: { format: { type: "json_schema", schema: AI_SCHEMA } },
-        messages: [{ role: "user", content: userMsg }]
-      })
-    });
-    if (!resp.ok) {
-      let detail = "";
-      try { detail = (await resp.json()).error?.message || ""; } catch (e) { /* ignore */ }
-      if (resp.status === 401) throw new Error("De API-sleutel is ongeldig of ingetrokken (401).");
-      if (resp.status === 429) throw new Error("Te veel verzoeken of limiet bereikt (429). Probeer het zo weer.");
-      throw new Error(`De API gaf een fout (${resp.status}). ${detail}`);
-    }
-    const data = await resp.json();
-    if (data.stop_reason === "refusal") throw new Error("Het verzoek is door de veiligheidsfilters van het model geweigerd.");
-    const textBlock = (data.content || []).find(b => b.type === "text");
-    if (!textBlock) throw new Error("De API gaf geen tekstuele uitkomst terug.");
-    const result = JSON.parse(textBlock.text);
-    renderAiResult(result);
+    const out = engine === "claude" ? await callClaude(userMsg) : await callLocal(userMsg);
+    if (out.result) renderAiResult(out.result);
+    else renderAiText(out.rawText);
     aiStatus.hidden = true;
   } catch (err) {
     aiStatus.hidden = true;
-    aiError.textContent = err instanceof TypeError
-      ? "Kon de API niet bereiken. Controleer je internetverbinding (of een adblocker/firewall die api.anthropic.com blokkeert)."
-      : err.message;
+    aiError.textContent = err.message || String(err);
     aiError.hidden = false;
   } finally {
     aiBtn.disabled = false;
   }
 });
+
+function renderAiText(text) {
+  document.getElementById("aiSummary").innerHTML =
+    `<div style="grid-column:1/-1"><div class="ai-text-result">${esc(text)}</div>
+     <p class="ai-note">Het lokale model gaf geen geldig JSON terug; hierboven staat de letterlijke uitkomst. Probeer het opnieuw, of kies een groter model voor een gestructureerd resultaat.</p></div>`;
+  document.getElementById("aiKantelpunten").innerHTML = "";
+  document.getElementById("aiResult").hidden = false;
+}
 
 function renderAiResult(r) {
   const a = state.analysis;
